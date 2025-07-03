@@ -1,0 +1,8 @@
+node_modules
+db_individual_creations
+nginx
+Dockerfile
+
+.env.dev
+.env.prod
+.env.test

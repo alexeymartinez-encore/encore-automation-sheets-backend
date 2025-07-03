@@ -1,0 +1,10 @@
+node_modules
+Dockerfile
+.git
+
+.env.dev
+.env.prod
+.env.test
+
+db_individual_creations
+nginx
