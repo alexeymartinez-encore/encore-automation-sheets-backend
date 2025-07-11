@@ -1,6 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
+const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
@@ -17,23 +18,14 @@ app.use(bodyParser.json());
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
 
-const allowedOrigin = process.env.CORS_ORIGIN;
+const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:5173";
 
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-  );
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.use(
+  cors({
+    origin: allowedOrigin,
+    credentials: true, // Required for cookie-based auth
+  })
+);
 
 // API Routes
 app.use("/auth", authRoutes);

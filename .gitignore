@@ -2,6 +2,7 @@ node_modules
 db_individual_creations
 nginx
 Dockerfile
+uploads
 
 .env.dev
 .env.prod
