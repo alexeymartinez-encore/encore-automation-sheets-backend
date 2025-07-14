@@ -163,7 +163,7 @@ exports.requestPasswordReset = async (req, res, next) => {
   });
 
   //  Email this link to user
-  const resetLink = `http://localhost:5173/employee-portal/reset-password/${resetToken}`;
+  const resetLink = `${process.env.RESET_PASSWORD_LINK}/employee-portal/reset-password/${resetToken}`;
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
@@ -179,7 +179,6 @@ exports.requestPasswordReset = async (req, res, next) => {
       console.error("Error sending email:", error);
       return res.status(500).json({ message: "Failed to send reset email." });
     } else {
-      // console.log("Email sent:", info.response);
       return res
         .status(200)
         .json({ message: "Reset link sent to your email." });
@@ -193,16 +192,12 @@ exports.requestPasswordReset = async (req, res, next) => {
 exports.resetPassword = async (req, res, next) => {
   const { token, password } = req.body;
 
-  // console.log("HERE 1", token, password);
-
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return res.status(400).json({ message: "Invalid or expired token." });
   }
-
-  // console.log("HEREE", decoded);
 
   const user = await Employee.findByPk(decoded.userId);
   if (!user) {

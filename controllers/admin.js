@@ -155,7 +155,6 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
         cost_code_description: entry.CostCode?.description ?? "N/A",
       })),
     }));
-    console.log(result);
 
     // Send the response
     res.status(200).json({

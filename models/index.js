@@ -4,7 +4,6 @@ const { sequelize } = require("../config/db");
 const Employee = require("./employee");
 const Role = require("./role");
 const Authentication = require("./authentication");
-const EmployeeStatus = require("./employee_status");
 const Timesheet = require("./timesheet");
 const TimesheetEntry = require("./timesheet_entry");
 const ExpenseFile = require("./expense_file");
@@ -20,12 +19,6 @@ const Miscellaneous = require("./miscellaneous");
 // Associations
 Employee.hasMany(Timesheet, { foreignKey: "employee_id", onDelete: "CASCADE" });
 Timesheet.belongsTo(Employee, { foreignKey: "employee_id" });
-
-Employee.hasOne(EmployeeStatus, {
-  foreignKey: "employee_id",
-  onDelete: "CASCADE",
-});
-EmployeeStatus.belongsTo(Employee, { foreignKey: "employee_id" });
 
 Employee.hasMany(Expense, { foreignKey: "employee_id", onDelete: "CASCADE" });
 Expense.belongsTo(Employee, { foreignKey: "employee_id" });
@@ -105,7 +98,6 @@ module.exports = {
   Employee,
   Role,
   Authentication,
-  EmployeeStatus,
   Timesheet,
   TimesheetEntry,
   ExpenseFile,

@@ -55,6 +55,14 @@ const Employee = sequelize.define(
       },
       comment: "Foreign key to Role table for assigning a role",
     },
+    is_contractor: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+    },
   },
   {
     tableName: "employee", // Explicitly set table name to "Employee"

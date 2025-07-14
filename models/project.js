@@ -43,6 +43,10 @@ const Project = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: false,
     },
+    perdiem: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
     customer_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
