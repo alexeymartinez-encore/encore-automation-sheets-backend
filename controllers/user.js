@@ -32,7 +32,6 @@ exports.getUserById = (req, res, next) => {
 };
 
 exports.getAllEmployees = async (req, res, next) => {
-  // console.log("HELLLOOOOO");
   try {
     const employees = await Employee.findAll({
       attributes: ["id", "first_name", "last_name"],
