@@ -45,7 +45,7 @@ const Expense = sequelize.define(
       allowNull: true,
     },
     total: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.FLOAT,
       allowNull: false,
     },
     approved_by: {

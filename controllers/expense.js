@@ -187,13 +187,6 @@ exports.saveExpenseSheet = async (req, res, next) => {
       const file = receiptFiles[i];
       const entryId = parsedEntryIds[i];
 
-      // if (!entryId) {
-      //   console.warn(
-      //     `Skipping file ${file.originalname} — no entryId provided`
-      //   );
-      //   continue;
-      // }
-
       await ExpenseFile.create(
         {
           expense_id: Number(savedExpense.id),

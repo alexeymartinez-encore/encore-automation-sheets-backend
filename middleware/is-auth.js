@@ -2,10 +2,7 @@ const jwt = require("jsonwebtoken");
 
 module.exports = (req, res, next) => {
   const token = req.cookies.token; // <<<<<< USE COOKIE INSTEAD OF HEADER
-  console.log(
-    "=============================================HERE=============================================================="
-  );
-  console.log(token);
+
   if (!token) {
     const error = new Error("Not authenticated.");
     error.statusCode = 401;
