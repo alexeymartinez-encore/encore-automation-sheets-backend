@@ -4,6 +4,6 @@ nginx
 Dockerfile
 uploads
 
-.env.dev
-.env.prod
+.env.development
+.env.production
 .env.test

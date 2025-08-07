@@ -35,6 +35,7 @@ router.get(
   isAuth,
   adminController.getExpensesByMonthStart
 );
+router.get("/expense/:id", isAuth, adminController.getExpenseById);
 
 router.get("/open-expenses", isAuth, adminController.getOpenExpenses);
 

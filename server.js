@@ -2,7 +2,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 // Load correct .env file based on NODE_ENV
-const envFile = `.env.${process.env.NODE_ENV || "dev"}`;
+const envFile = `.env.${process.env.NODE_ENV || "development"}`;
 dotenv.config({ path: path.resolve(__dirname, envFile) });
 
 const app = require("./app");

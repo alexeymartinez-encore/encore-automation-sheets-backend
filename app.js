@@ -1,5 +1,4 @@
 const express = require("express");
-const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 
@@ -14,7 +13,9 @@ const managerRoutes = require("./routes/manager");
 
 const app = express();
 
-app.use(bodyParser.json());
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
 

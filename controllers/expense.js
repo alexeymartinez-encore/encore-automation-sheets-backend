@@ -5,13 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
+const { parseToDate } = require("../util/dateParser");
 
 // Get Employee Expenses By ID
 exports.getExpensesByUserId = async (req, res, next) => {
   const userId = req.params.id;
   const authenticatedUserId = req.userId; // ID From the token (set in isAuth Middleware)
-
   if (authenticatedUserId !== userId) {
+    // console.log("Can't see You need to be the user or an admin");
     const error = new Error(
       "You are not authorized to view this user's details"
     );
@@ -51,6 +52,10 @@ exports.saveExpenseSheet = async (req, res, next) => {
   try {
     const expenseData = JSON.parse(req.body.expenseData);
     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
+
+    // Sanitize dates
+    expenseData.date_start = parseToDate(expenseData.date_start);
+    expenseData.date_paid = parseToDate(expenseData.date_paid);
 
     let savedExpense;
 
@@ -262,7 +267,7 @@ exports.deleteExpenseSheetById = async (req, res, next) => {
   }
 };
 
-exports.getExpenseEntriesByTimesheetId = async (req, res, next) => {
+exports.getExpenseEntriesByExpenseId = async (req, res, next) => {
   const expenseId = req.params.id;
 
   try {
@@ -270,6 +275,11 @@ exports.getExpenseEntriesByTimesheetId = async (req, res, next) => {
       where: {
         expense_id: expenseId,
       },
+      // include: [
+      //   {
+      //     model: ExpenseFile,
+      //   },
+      // ],
     });
 
     res.status(200).json({

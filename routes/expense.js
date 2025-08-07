@@ -23,7 +23,7 @@ router.delete(
 router.get(
   "/entries/:id",
   isAuth,
-  expenseController.getExpenseEntriesByTimesheetId
+  expenseController.getExpenseEntriesByExpenseId
 );
 
 router.delete(

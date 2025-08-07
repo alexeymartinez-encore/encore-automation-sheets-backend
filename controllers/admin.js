@@ -1,4 +1,5 @@
 const { sequelize } = require("../config/db");
+const moment = require("moment");
 
 const {
   Timesheet,
@@ -11,17 +12,19 @@ const {
   Customer,
   Employee,
   Miscellaneous,
+  ExpenseFile,
 } = require("../models");
 
 // Get timesheets by week ending
 exports.getTimesheetsByWeekEnding = async (req, res, next) => {
   const { weekEnding } = req.params;
+  const week_ending = moment(weekEnding).format("YYYY-MM-DD");
 
   try {
     // Fetch timesheets for the given weekEnding
     const timesheets = await Timesheet.findAll({
       where: {
-        week_ending: weekEnding, // Assuming `week_ending` matches directly
+        week_ending: week_ending, // Assuming `week_ending` matches directly
       },
       include: {
         model: Employee,
@@ -56,16 +59,17 @@ exports.getTimesheetsByWeekEnding = async (req, res, next) => {
 // Get Overtime report for last 2 weeks
 exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
   const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
 
   try {
     // Calculate the date from the previous week
-    const previousWeekDate = new Date(date);
+    const previousWeekDate = new Date(fixed_date);
     previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
     const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
 
     const timesheets = await Timesheet.findAll({
       where: {
-        week_ending: [date, previousWeekDateString], // both weeks
+        week_ending: [fixed_date, previousWeekDateString], // both weeks
       },
       include: {
         model: Employee,
@@ -101,17 +105,18 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
 // Get Labor Report (Employee Hours Report) for previous 2 weeks
 exports.getLaborReportBiweekly = async (req, res, next) => {
   const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
 
   try {
     // Calculate the previous week date
-    const previousWeekDate = new Date(date);
+    const previousWeekDate = new Date(fixed_date);
     previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
     const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
 
     // Fetch timesheets for the current week with employee data
     const timesheets = await Timesheet.findAll({
       where: {
-        week_ending: [date, previousWeekDateString],
+        week_ending: [fixed_date, previousWeekDateString],
       },
       include: [
         {
@@ -294,12 +299,13 @@ exports.getExpenseReportMonthly = async (req, res) => {
 // Get Expenses for all employess by month start
 exports.getExpensesByMonthStart = async (req, res, next) => {
   const { dateStart } = req.params;
+  const fixed_date = moment(dateStart).format("YYYY-MM-DD");
 
   try {
     // Fetch timesheets for the given weekEnding
     const expenses = await Expense.findAll({
       where: {
-        date_start: dateStart, // Assuming `week_ending` matches directly
+        date_start: fixed_date, // Assuming `week_ending` matches directly
       },
       include: [
         {
@@ -352,7 +358,6 @@ exports.getOpenExpenses = async (req, res) => {
         },
       ],
     });
-
     // Format result: expense fields + employee fields merged
     const result = expenses.map((expense) => ({
       id: expense.id,
@@ -721,6 +726,38 @@ exports.deleteProjectById = async (req, res, next) => {
     res.status(200).json({
       message: "Project Deleted Successfully",
       data: [],
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
+};
+
+// Get Employee Expenses By ID
+exports.getExpenseById = async (req, res, next) => {
+  const expenseId = req.params.id;
+
+  try {
+    const expenses = await Expense.findAll({
+      where: {
+        id: expenseId,
+      },
+      include: [
+        {
+          model: ExpenseFile,
+        },
+        {
+          model: ExpenseEntry,
+        },
+      ],
+    });
+
+    res.status(200).json({
+      message: "Expense Sheets Fetched Successfully",
+      data: expenses,
       internalStatus: "success",
     });
   } catch (err) {

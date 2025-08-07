@@ -214,6 +214,32 @@ exports.resetPassword = async (req, res, next) => {
   res.status(200).json({ message: "Password updated successfully." });
 };
 
+// Reset Password
+exports.resetPassword = async (req, res, next) => {
+  const { token, password } = req.body;
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(400).json({ message: "Invalid or expired token." });
+  }
+
+  const user = await Employee.findByPk(decoded.userId);
+  if (!user) {
+    return res.status(404).json({ message: "User not found." });
+  }
+
+  const hashedPw = await bcrypt.hash(password, 12);
+
+  await Authentication.update(
+    { password_hash: hashedPw },
+    { where: { user_id: user.id } }
+  );
+
+  res.status(200).json({ message: "Password updated successfully." });
+};
+
 // Verify Employee
 exports.verifyMe = async (req, res, next) => {
   const user = await Employee.findByPk(req.userId);
