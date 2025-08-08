@@ -360,32 +360,26 @@ exports.getOpenExpenses = async (req, res) => {
       include: [
         {
           model: Employee,
-          attributes: ["id", "first_name", "last_name", "employee_number"],
+          attributes: [
+            "id",
+            "first_name",
+            "last_name",
+            "employee_number",
+            "manager_id",
+          ],
         },
       ],
     });
-    // Format result: expense fields + employee fields merged
-    const result = expenses.map((expense) => ({
-      id: expense.id,
-      employee_id: expense.employee_id,
-      date_start: expense.date_start,
-      num_of_days: expense.num_of_days,
-      signed: expense.signed,
-      approved: expense.approved,
-      paid: expense.paid,
-      date_paid: expense.date_paid,
-      total: expense.total,
-      approved_by: expense.approved_by,
-      processed_by: expense.processed_by,
-      submitted_by: expense.submitted_by,
-      message: expense.message,
-      createdAt: expense.createdAt,
-      updatedAt: expense.updatedAt,
-      // Employee info
-      first_name: expense.Employee?.first_name ?? null,
-      last_name: expense.Employee?.last_name ?? null,
-      employee_number: expense.Employee?.employee_number ?? null,
-    }));
+
+    // Attach employee details to each timesheet
+    const result = expenses.map((expense) => {
+      return {
+        ...expense.toJSON(),
+        first_name: expense.Employee?.first_name ?? null,
+        last_name: expense.Employee?.last_name ?? null,
+        manager_id: expense.Employee?.manager_id ?? null,
+      };
+    });
 
     res.status(200).json({
       message: "Open expenses fetched successfully",
