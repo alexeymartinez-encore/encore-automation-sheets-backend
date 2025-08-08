@@ -18,7 +18,13 @@ const {
 // Get timesheets by week ending
 exports.getTimesheetsByWeekEnding = async (req, res, next) => {
   const { weekEnding } = req.params;
+  console.log("=========TIMESHEETS 1===========");
+
+  console.log(weekEnding);
   const week_ending = moment(weekEnding).format("YYYY-MM-DD");
+  console.log("=========TIMESHEETS 2===========");
+
+  console.log(week_ending);
 
   try {
     // Fetch timesheets for the given weekEnding
