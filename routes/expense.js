@@ -20,6 +20,13 @@ router.delete(
   isAuth,
   expenseController.deleteExpenseSheetById
 );
+
+router.delete(
+  "/expense-entry/:id",
+  isAuth,
+  expenseController.deleteExpenseEntry
+);
+
 router.get(
   "/entries/:id",
   isAuth,
