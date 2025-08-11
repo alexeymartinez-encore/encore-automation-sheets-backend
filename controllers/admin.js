@@ -111,18 +111,19 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
 // Get Labor Report (Employee Hours Report) for previous 2 weeks
 exports.getLaborReportBiweekly = async (req, res, next) => {
   const { date } = req.params;
-  const fixed_date = moment(date).format("YYYY-MM-DD");
+
+  // const fixed_date = moment(date).format("YYYY-MM-DD");
 
   try {
     // Calculate the previous week date
-    const previousWeekDate = new Date(fixed_date);
+    const previousWeekDate = new Date(date);
     previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
     const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
 
     // Fetch timesheets for the current week with employee data
     const timesheets = await Timesheet.findAll({
       where: {
-        week_ending: [fixed_date, previousWeekDateString],
+        week_ending: [date, previousWeekDateString],
       },
       include: [
         {
@@ -149,28 +150,10 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
       ],
     });
 
-    // Format response
-    const result = timesheets.map((ts) => ({
-      timesheet: {
-        ...ts.toJSON(),
-        employee_first_name: ts.Employee?.first_name ?? "N/A",
-        employee_last_name: ts.Employee?.last_name ?? "N/A",
-      },
-      entries: ts.TimesheetEntries.map((entry) => ({
-        ...entry.toJSON(),
-        project: entry.Project?.number ?? "N/A",
-        project_description: entry.Project?.description ?? "N/A",
-        phase: entry.Phase?.number ?? "N/A",
-        phase_description: entry.Phase?.description ?? "N/A",
-        cost_code: entry.CostCode?.cost_code ?? "N/A",
-        cost_code_description: entry.CostCode?.description ?? "N/A",
-      })),
-    }));
-
     // Send the response
     res.status(200).json({
       message: "Request Successful!",
-      data: result,
+      data: timesheets,
       internalStatus: "success",
     });
   } catch (err) {
