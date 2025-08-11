@@ -356,6 +356,7 @@ exports.getOpenExpenses = async (req, res) => {
       where: {
         signed: 1,
         approved: 0,
+        paid: 0,
       },
       include: [
         {
@@ -764,6 +765,43 @@ exports.getExpenseById = async (req, res, next) => {
     if (!err.statusCode) {
       err.statusCode = 500;
     }
+    next(err);
+  }
+};
+
+exports.getTimesheetById = async (req, res, next) => {
+  const timesheetId = req.params.id;
+  console.log(timesheetId, "===========================================");
+  try {
+    const timesheets = await Timesheet.findAll({
+      where: { id: timesheetId },
+      // include: [
+      //   // include the owner (employee)
+
+      //   // include entries (add deeper includes if you want)
+      //   {
+      //     model: TimesheetEntry,
+
+      //     // include: [{ model: Project }, { model: Phase }, { model: CostCode }],
+      //   },
+      // ],
+    });
+
+    if (!timesheets || timesheets.length === 0) {
+      return res.status(404).json({
+        message: "Timesheet not found",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    res.status(200).json({
+      message: "Timesheet fetched successfully",
+      data: timesheets, // array, just like your Expense example
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) err.statusCode = 500;
     next(err);
   }
 };
