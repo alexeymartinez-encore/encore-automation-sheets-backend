@@ -736,6 +736,10 @@ exports.getExpenseById = async (req, res, next) => {
         {
           model: ExpenseEntry,
         },
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
       ],
     });
 
@@ -758,16 +762,19 @@ exports.getTimesheetById = async (req, res, next) => {
   try {
     const timesheets = await Timesheet.findAll({
       where: { id: timesheetId },
-      // include: [
-      //   // include the owner (employee)
+      include: [
+        // include the owner (employee)
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
+        // include entries (add deeper includes if you want)
+        // {
+        //   model: TimesheetEntry,
 
-      //   // include entries (add deeper includes if you want)
-      //   {
-      //     model: TimesheetEntry,
-
-      //     // include: [{ model: Project }, { model: Phase }, { model: CostCode }],
-      //   },
-      // ],
+        //   // include: [{ model: Project }, { model: Phase }, { model: CostCode }],
+        // },
+      ],
     });
 
     if (!timesheets || timesheets.length === 0) {
