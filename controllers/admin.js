@@ -331,7 +331,7 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
   }
 };
 
-// Get Open timesheets
+// Get Open Expenses
 exports.getOpenExpenses = async (req, res) => {
   try {
     // Fetch all signed expenses with the employee attached
@@ -374,6 +374,54 @@ exports.getOpenExpenses = async (req, res) => {
     console.error("Error fetching open expenses:", err);
     res.status(500).json({
       message: "Server error fetching open expenses",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getOpenTimesheets = async (req, res) => {
+  try {
+    // Fetch all signed expenses with the employee attached
+    const timesheets = await Timesheet.findAll({
+      where: {
+        signed: 1,
+        approved: 0,
+        processed: 0,
+      },
+      include: [
+        {
+          model: Employee,
+          attributes: [
+            "id",
+            "first_name",
+            "last_name",
+            "employee_number",
+            "manager_id",
+          ],
+        },
+      ],
+    });
+
+    // Attach employee details to each timesheet
+    const result = timesheets.map((timesheet) => {
+      return {
+        ...timesheet.toJSON(),
+        first_name: timesheet.Employee?.first_name ?? null,
+        last_name: timesheet.Employee?.last_name ?? null,
+        manager_id: timesheet.Employee?.manager_id ?? null,
+      };
+    });
+
+    res.status(200).json({
+      message: "Open timesheets fetched successfully",
+      data: result,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching open timesheets:", err);
+    res.status(500).json({
+      message: "Server error fetching open timesheets",
       error: err.message,
       internalStatus: "fail",
     });

@@ -37,6 +37,7 @@ router.get(
 );
 router.get("/expense/:id", isAuth, adminController.getExpenseById);
 router.get("/timesheet/:id", isAuth, adminController.getTimesheetById);
+router.get("/open-timesheets", isAuth, adminController.getOpenTimesheets);
 
 router.get("/open-expenses", isAuth, adminController.getOpenExpenses);
 

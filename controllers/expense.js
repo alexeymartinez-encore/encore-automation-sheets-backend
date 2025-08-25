@@ -265,7 +265,6 @@ exports.saveExpenseSheet = async (req, res, next) => {
 };
 
 // Delete a single expense entry by ID
-// DELETE /expenses/expense-entry/:id  (or your actual mount path)
 exports.deleteExpenseEntry = async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
