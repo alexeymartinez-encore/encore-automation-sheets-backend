@@ -128,7 +128,10 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
       include: [
         {
           model: Employee,
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "last_name", "is_contractor"],
+          where: {
+            is_contractor: false, // just exclude contractors
+          },
         },
         {
           model: TimesheetEntry,
