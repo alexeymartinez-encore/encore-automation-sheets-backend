@@ -1,4 +1,17 @@
-const Event = require("../models/event");
+const {
+  Event,
+  Timesheet,
+  Expense,
+  ExpenseEntry,
+  TimesheetEntry,
+  Project,
+  CostCode,
+  Phase,
+  Customer,
+  Employee,
+  Miscellaneous,
+  ExpenseFile,
+} = require("../models");
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
 
 // Get timesheets by week ending
@@ -98,7 +111,7 @@ exports.fetchEventsByMonth = async (req, res, next) => {
 
     const events = await Event.findAll({
       where: { formatted_month: date },
-      raw: true,
+      raw: false,
       attributes: [
         "id",
         "employee_id",
@@ -112,6 +125,10 @@ exports.fetchEventsByMonth = async (req, res, next) => {
         "createdAt",
         "updatedAt",
       ],
+      include: {
+        model: Employee,
+        attributes: ["first_name", "last_name"],
+      },
     });
 
     return res.status(200).json({

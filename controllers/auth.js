@@ -101,6 +101,8 @@ exports.login = async (req, res, next) => {
     const isEqual = await bcrypt.compare(password, auth.password_hash);
     if (!isEqual) throw new Error("Wrong Password!");
 
+    const totalEmployees = await Employee.count();
+
     const manager = user.manager_id
       ? await Employee.findByPk(user.manager_id, {
           attributes: ["first_name", "last_name"],
@@ -134,6 +136,7 @@ exports.login = async (req, res, next) => {
         },
         status: 200,
         expiresIn: Date.now() + 60 * 60 * 1000,
+        totalEmployees,
       });
   } catch (err) {
     err.statusCode = err.statusCode || 401;

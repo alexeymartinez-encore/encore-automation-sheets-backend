@@ -47,6 +47,11 @@ const Project = sequelize.define(
     //   type: DataTypes.FLOAT,
     //   allowNull: true,
     // },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: true,
+    },
     customer_id: {
       type: DataTypes.INTEGER,
       allowNull: false,

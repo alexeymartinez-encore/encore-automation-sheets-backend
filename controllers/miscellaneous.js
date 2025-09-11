@@ -7,7 +7,9 @@ const Customer = require("../models/customer");
 exports.getAllProjects = async (req, res, next) => {
   try {
     // Fetch all projects from the Project table
-    const projects = await Project.findAll();
+    const projects = await Project.findAll({
+      where: { is_active: true },
+    });
 
     // Return the fetched projects in the response
     res.status(200).json({

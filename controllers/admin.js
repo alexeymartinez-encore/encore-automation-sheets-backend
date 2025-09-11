@@ -526,6 +526,7 @@ exports.editProjectById = async (req, res, next) => {
         description: projectData.description,
         short_name: projectData.short_name,
         comment: projectData.comment,
+        is_active: projectData.is_active,
         overtime: projectData.overtime,
         sga_flag: projectData.sga_flag,
         customer_id: projectData.customer_id,

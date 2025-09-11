@@ -15,6 +15,7 @@ const PurchaseOrder = require("./purchase_order");
 const Expense = require("./expense");
 const ExpenseEntry = require("./expense_entry");
 const Miscellaneous = require("./miscellaneous");
+const Event = require("./event");
 
 // Associations
 Employee.hasMany(Timesheet, { foreignKey: "employee_id", onDelete: "CASCADE" });
@@ -93,6 +94,9 @@ Authentication.belongsTo(Employee, { foreignKey: "user_id" });
 Employee.belongsTo(Role, { foreignKey: "role_id", onDelete: "CASCADE" });
 Role.hasMany(Employee, { foreignKey: "role_id" });
 
+Event.belongsTo(Employee, { foreignKey: "employee_id", onDelete: "CASCADE" });
+Employee.hasMany(Event, { foreignKey: "employee_id", onDelete: "CASCADE" });
+
 module.exports = {
   sequelize,
   Employee,
@@ -109,4 +113,5 @@ module.exports = {
   Expense,
   ExpenseEntry,
   Miscellaneous,
+  Event,
 };
