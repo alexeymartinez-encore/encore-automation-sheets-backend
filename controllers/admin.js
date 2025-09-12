@@ -295,9 +295,7 @@ exports.getExpenseReportMonthly = async (req, res) => {
 exports.getOpenExpenseReport = async (req, res) => {
   const { dateStart } = req.params;
   const fixed_date = moment(dateStart).format("YYYY-MM-DD"); // normalize input date
-  console.log("=========================================");
-  console.log(dateStart);
-  console.log(fixed_date);
+
   try {
     // Fetch all Expenses for the given date, with Employee and ExpenseEntries in one shot
     const expenses = await Expense.findAll({
@@ -475,9 +473,7 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
 exports.getOpenExpenses = async (req, res) => {
   const { dateStart } = req.params;
   const fixed_date = moment(dateStart).format("YYYY-MM-DD"); // normalize input date
-  console.log("=========================================");
-  console.log(dateStart);
-  console.log(fixed_date);
+
   try {
     // Fetch all signed expenses with the employee attached
     const expenses = await Expense.findAll({
@@ -951,7 +947,6 @@ exports.getExpenseById = async (req, res, next) => {
 
 exports.getTimesheetById = async (req, res, next) => {
   const timesheetId = req.params.id;
-  console.log(timesheetId, "===========================================");
   try {
     const timesheets = await Timesheet.findAll({
       where: { id: timesheetId },
