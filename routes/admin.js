@@ -25,9 +25,15 @@ router.get(
 );
 
 router.get(
-  "/timesheets/expense-report/:date",
+  "/expenses/expense-report/:date",
   isAuth,
   adminController.getExpenseReportMonthly
+);
+
+router.get(
+  "/expenses/expense-report-open",
+  isAuth,
+  adminController.getOpenExpenseReport
 );
 
 router.get(
