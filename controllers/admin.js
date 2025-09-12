@@ -1,5 +1,6 @@
 const { sequelize } = require("../config/db");
 const moment = require("moment");
+const { Op } = require("sequelize");
 
 const {
   Timesheet,
@@ -292,13 +293,20 @@ exports.getExpenseReportMonthly = async (req, res) => {
 
 // Get Expense Report by month for each Employe
 exports.getOpenExpenseReport = async (req, res) => {
+  const { dateStart } = req.params;
+  const fixed_date = moment(dateStart).format("YYYY-MM-DD"); // normalize input date
+  console.log("=========================================");
+  console.log(dateStart);
+  console.log(fixed_date);
   try {
     // Fetch all Expenses for the given date, with Employee and ExpenseEntries in one shot
     const expenses = await Expense.findAll({
       where: {
         signed: 1,
-        // approved: 0,
         paid: 0,
+        date_start: {
+          [Op.lte]: fixed_date, // anything on or before fixed_date
+        },
       },
       include: [
         {
@@ -465,13 +473,20 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
 
 // Get Open Expenses
 exports.getOpenExpenses = async (req, res) => {
+  const { dateStart } = req.params;
+  const fixed_date = moment(dateStart).format("YYYY-MM-DD"); // normalize input date
+  console.log("=========================================");
+  console.log(dateStart);
+  console.log(fixed_date);
   try {
     // Fetch all signed expenses with the employee attached
     const expenses = await Expense.findAll({
       where: {
         signed: 1,
-        // approved: 0,
         paid: 0,
+        date_start: {
+          [Op.lte]: fixed_date, // anything on or before fixed_date
+        },
       },
       include: [
         {
@@ -487,15 +502,12 @@ exports.getOpenExpenses = async (req, res) => {
       ],
     });
 
-    // Attach employee details to each timesheet
-    const result = expenses.map((expense) => {
-      return {
-        ...expense.toJSON(),
-        first_name: expense.Employee?.first_name ?? null,
-        last_name: expense.Employee?.last_name ?? null,
-        manager_id: expense.Employee?.manager_id ?? null,
-      };
-    });
+    const result = expenses.map((expense) => ({
+      ...expense.toJSON(),
+      first_name: expense.Employee?.first_name ?? null,
+      last_name: expense.Employee?.last_name ?? null,
+      manager_id: expense.Employee?.manager_id ?? null,
+    }));
 
     res.status(200).json({
       message: "Open expenses fetched successfully",

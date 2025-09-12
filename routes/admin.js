@@ -31,7 +31,7 @@ router.get(
 );
 
 router.get(
-  "/expenses/expense-report-open",
+  "/expenses/expense-report-open/:dateStart",
   isAuth,
   adminController.getOpenExpenseReport
 );
@@ -45,7 +45,11 @@ router.get("/expense/:id", isAuth, adminController.getExpenseById);
 router.get("/timesheet/:id", isAuth, adminController.getTimesheetById);
 router.get("/open-timesheets", isAuth, adminController.getOpenTimesheets);
 
-router.get("/open-expenses", isAuth, adminController.getOpenExpenses);
+router.get(
+  "/open-expenses/:dateStart",
+  isAuth,
+  adminController.getOpenExpenses
+);
 
 router.get("/employees/get-all", isAuth, adminController.getAllEmployees);
 
