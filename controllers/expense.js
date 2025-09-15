@@ -46,6 +46,225 @@ exports.getExpensesByUserId = async (req, res, next) => {
 };
 
 // Save Expense Sheet with ID and Data
+// exports.saveExpenseSheet = async (req, res, next) => {
+//   const t = await sequelize.transaction(); // Start transaction
+
+//   try {
+//     const expenseData = JSON.parse(req.body.expenseData);
+//     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
+
+//     // Sanitize dates
+//     expenseData.date_start = parseToDate(expenseData.date_start);
+//     expenseData.date_paid = parseToDate(expenseData.date_paid);
+
+//     let savedExpense;
+
+//     // Check for duplicate expense (by employee_id + date_start)
+//     if (!expenseData.id) {
+//       const existingExpense = await Expense.findOne({
+//         where: {
+//           employee_id: expenseData.employee_id,
+//           date_start: expenseData.date_start,
+//         },
+//         transaction: t,
+//       });
+
+//       if (existingExpense) {
+//         await t.rollback();
+//         return res.status(200).json({
+//           message: "Expense Already Exists (Existing Date)",
+//           data: { expense: [], entries: [] },
+//           internalStatus: "fail",
+//         });
+//       }
+//     }
+
+//     // Save or update the Expense
+//     if (expenseData.id) {
+//       await Expense.update(
+//         {
+//           approved: expenseData.approved || false,
+//           approved_by: expenseData.approved_by || "None",
+//           date_paid: expenseData.date_paid || null,
+//           employee_id: Number(expenseData.employee_id),
+//           message: expenseData.message || "None",
+//           paid: expenseData.paid || false,
+//           processed_by: expenseData.processed_by || "None",
+//           signed: expenseData.signed || false,
+//           submitted_by: expenseData.submitted_by || "None",
+//           num_of_days: expenseData.num_of_days,
+//           date_start: expenseData.date_start,
+//           total: expenseData.total,
+//         },
+//         { where: { id: expenseData.id }, transaction: t }
+//       );
+//       savedExpense = await Expense.findByPk(expenseData.id, { transaction: t });
+//     } else {
+//       savedExpense = await Expense.create(
+//         {
+//           approved: expenseData.approved || false,
+//           approved_by: expenseData.approved_by || "None",
+//           date_paid: expenseData.date_paid || null,
+//           employee_id: Number(expenseData.employee_id),
+//           message: expenseData.message || "None",
+//           paid: expenseData.paid || false,
+//           processed_by: expenseData.processed_by || "None",
+//           signed: expenseData.signed || false,
+//           submitted_by: expenseData.submitted_by || "None",
+//           num_of_days: expenseData.num_of_days,
+//           date_start: expenseData.date_start,
+//           total: expenseData.total,
+//         },
+//         { transaction: t }
+//       );
+
+//       if (!savedExpense.id) throw new Error("Failed to save expense");
+//     }
+
+//     //  shared predicate to define “meaningfully filled”
+//     const isMeaningfullyFilled = (entry) => {
+//       const num = (v) => Number(v || 0);
+//       const str = (v) => (v ?? "").trim();
+
+//       const anyPositiveAmount =
+//         num(entry.destination_cost) > 0 ||
+//         num(entry.lodging_cost) > 0 ||
+//         num(entry.other_expense_cost) > 0 ||
+//         num(entry.car_rental_cost) > 0 ||
+//         num(entry.miles) > 0 ||
+//         num(entry.miles_cost) > 0 ||
+//         num(entry.perdiem_cost) > 0 ||
+//         num(entry.entertainment_cost) > 0 ||
+//         num(entry.miscellaneous_amount) > 0;
+
+//       const anyText =
+//         str(entry.purpose) !== "" || str(entry.destination_name) !== "";
+
+//       // Do NOT count project_id alone as meaningful
+//       return anyPositiveAmount || anyText;
+//     };
+
+//     // Save or update expense entries
+//     const savedEntries = await Promise.all(
+//       expenseEntriesData.map(async (entry) => {
+//         const creatingNew = !entry.id;
+
+//         // skip creating totally empty rows
+//         if (creatingNew && !isMeaningfullyFilled(entry)) {
+//           return null;
+//         }
+
+//         if (entry.id) {
+//           const existingEntry = await ExpenseEntry.findOne({
+//             where: { id: entry.id },
+//             transaction: t,
+//           });
+
+//           if (!existingEntry) {
+//             throw new Error(`Expense entry with ID ${entry.id} not found`);
+//           }
+
+//           //   if user cleared an existing row, delete it
+//           if (!isMeaningfullyFilled(entry)) {
+//             await existingEntry.destroy({ transaction: t });
+//             return null;
+//           }
+
+//           return existingEntry.update(
+//             {
+//               project_id: Number(entry.project_id) || 2,
+//               purpose: entry.purpose || "Nothing",
+//               day: Number(entry.day) || null,
+//               destination_name: entry.destination_name,
+//               destination_cost: Number(entry.destination_cost) || 0,
+//               lodging_cost: Number(entry.lodging_cost) || 0,
+//               other_expense_cost: Number(entry.other_expense_cost) || 0,
+//               car_rental_cost: Number(entry.car_rental_cost) || 0,
+//               miles: Number(entry.miles) || 0,
+//               miles_cost: Number(entry.miles_cost) || 0,
+//               perdiem_cost: Number(entry.perdiem_cost) || 0,
+//               entertainment_cost: Number(entry.entertainment_cost) || 0,
+//               miscellaneous_description_id:
+//                 Number(entry.miscellaneous_description_id) || 1,
+//               miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+//             },
+//             { transaction: t }
+//           );
+//         } else {
+//           // Only reached if meaningfully filled
+//           return ExpenseEntry.create(
+//             {
+//               expense_id: Number(savedExpense.id),
+//               project_id: Number(entry.project_id) || 2,
+//               purpose: entry.purpose || "Nothing",
+//               day: Number(entry.day) || null,
+//               destination_name: entry.destination_name,
+//               destination_cost: Number(entry.destination_cost) || 0,
+//               lodging_cost: Number(entry.lodging_cost) || 0,
+//               other_expense_cost: Number(entry.other_expense_cost) || 0,
+//               car_rental_cost: Number(entry.car_rental_cost) || 0,
+//               miles: Number(entry.miles) || 0,
+//               miles_cost: Number(entry.miles_cost) || 0,
+//               perdiem_cost: Number(entry.perdiem_cost) || 0,
+//               entertainment_cost: Number(entry.entertainment_cost) || 0,
+//               miscellaneous_description_id:
+//                 Number(entry.miscellaneous_description_id) || 1,
+//               miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+//             },
+//             { transaction: t }
+//           );
+//         }
+//       })
+//     );
+
+//     // Handle uploaded receipts and map them to correct entry
+//     const receiptFiles = req.files || [];
+//     const receiptEntryIds = req.body.receiptEntryIds || [];
+
+//     const parsedEntryIds = Array.isArray(receiptEntryIds)
+//       ? receiptEntryIds
+//       : [receiptEntryIds]; // normalize single string to array
+
+//     for (let i = 0; i < receiptFiles.length; i++) {
+//       const file = receiptFiles[i];
+//       const entryId = parsedEntryIds[i];
+
+//       await ExpenseFile.create(
+//         {
+//           expense_id: Number(savedExpense.id),
+//           url: file.path,
+//           upload_date: new Date(),
+//         },
+//         { transaction: t }
+//       );
+//     }
+
+//     // Commit transaction
+//     await t.commit();
+
+//     return res.status(200).json({
+//       message: "Expense Saved Successfully",
+//       data: { expense: savedExpense, entries: savedEntries },
+//       internalStatus: "success",
+//     });
+//   } catch (error) {
+//     try {
+//       if (t && !t.finished && t.finished !== "rollback") {
+//         await t.rollback();
+//       }
+//     } catch (rollbackError) {
+//       console.error("Rollback failed:", rollbackError.message);
+//     }
+
+//     console.error("Error saving expense and entries:", error);
+//     return res.status(500).json({
+//       message: "Error saving expense and entries",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// Save Expense Sheet with Replace-All Strategy
 exports.saveExpenseSheet = async (req, res, next) => {
   const t = await sequelize.transaction(); // Start transaction
 
@@ -59,7 +278,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
 
     let savedExpense;
 
-    // Check for duplicate expense (by employee_id + date_start)
+    // Check for duplicate expense (by employee_id + date_start) only when creating new
     if (!expenseData.id) {
       const existingExpense = await Expense.findOne({
         where: {
@@ -117,11 +336,11 @@ exports.saveExpenseSheet = async (req, res, next) => {
         },
         { transaction: t }
       );
-
-      if (!savedExpense.id) throw new Error("Failed to save expense");
     }
 
-    //  shared predicate to define “meaningfully filled”
+    if (!savedExpense.id) throw new Error("Failed to save expense");
+
+    // Shared predicate to define “meaningfully filled”
     const isMeaningfullyFilled = (entry) => {
       const num = (v) => Number(v || 0);
       const str = (v) => (v ?? "").trim();
@@ -140,90 +359,100 @@ exports.saveExpenseSheet = async (req, res, next) => {
       const anyText =
         str(entry.purpose) !== "" || str(entry.destination_name) !== "";
 
-      // Do NOT count project_id alone as meaningful
       return anyPositiveAmount || anyText;
     };
 
-    // Save or update expense entries
-    const savedEntries = await Promise.all(
-      expenseEntriesData.map(async (entry) => {
-        const creatingNew = !entry.id;
+    // === Replace-All Strategy for Entries ===
 
-        // skip creating totally empty rows
-        if (creatingNew && !isMeaningfullyFilled(entry)) {
-          return null;
-        }
+    // Fetch all existing entries for this expense
+    const existingEntries = await ExpenseEntry.findAll({
+      where: { expense_id: savedExpense.id },
+      transaction: t,
+    });
 
-        if (entry.id) {
-          const existingEntry = await ExpenseEntry.findOne({
-            where: { id: entry.id },
-            transaction: t,
-          });
+    const incomingIds = expenseEntriesData
+      .map((e) => (e.id ? Number(e.id) : null))
+      .filter(Boolean);
 
-          if (!existingEntry) {
-            throw new Error(`Expense entry with ID ${entry.id} not found`);
-          }
-
-          //   if user cleared an existing row, delete it
-          if (!isMeaningfullyFilled(entry)) {
-            await existingEntry.destroy({ transaction: t });
-            return null;
-          }
-
-          return existingEntry.update(
-            {
-              project_id: Number(entry.project_id) || 2,
-              purpose: entry.purpose || "Nothing",
-              day: Number(entry.day) || null,
-              destination_name: entry.destination_name,
-              destination_cost: Number(entry.destination_cost) || 0,
-              lodging_cost: Number(entry.lodging_cost) || 0,
-              other_expense_cost: Number(entry.other_expense_cost) || 0,
-              car_rental_cost: Number(entry.car_rental_cost) || 0,
-              miles: Number(entry.miles) || 0,
-              miles_cost: Number(entry.miles_cost) || 0,
-              perdiem_cost: Number(entry.perdiem_cost) || 0,
-              entertainment_cost: Number(entry.entertainment_cost) || 0,
-              miscellaneous_description_id:
-                Number(entry.miscellaneous_description_id) || 1,
-              miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-            },
-            { transaction: t }
-          );
-        } else {
-          // Only reached if meaningfully filled
-          return ExpenseEntry.create(
-            {
-              expense_id: Number(savedExpense.id),
-              project_id: Number(entry.project_id) || 2,
-              purpose: entry.purpose || "Nothing",
-              day: Number(entry.day) || null,
-              destination_name: entry.destination_name,
-              destination_cost: Number(entry.destination_cost) || 0,
-              lodging_cost: Number(entry.lodging_cost) || 0,
-              other_expense_cost: Number(entry.other_expense_cost) || 0,
-              car_rental_cost: Number(entry.car_rental_cost) || 0,
-              miles: Number(entry.miles) || 0,
-              miles_cost: Number(entry.miles_cost) || 0,
-              perdiem_cost: Number(entry.perdiem_cost) || 0,
-              entertainment_cost: Number(entry.entertainment_cost) || 0,
-              miscellaneous_description_id:
-                Number(entry.miscellaneous_description_id) || 1,
-              miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-            },
-            { transaction: t }
-          );
-        }
-      })
+    // Delete entries that are in DB but missing in incoming
+    const toDelete = existingEntries.filter(
+      (dbEntry) => !incomingIds.includes(dbEntry.id)
     );
 
-    // Handle uploaded receipts and map them to correct entry
+    for (const entry of toDelete) {
+      await entry.destroy({ transaction: t });
+    }
+
+    // Upsert incoming entries
+    const savedEntries = [];
+    for (const entry of expenseEntriesData) {
+      const filled = isMeaningfullyFilled(entry);
+      if (!filled) continue; // skip empty rows
+
+      if (entry.id) {
+        // update existing
+        const existing = await ExpenseEntry.findOne({
+          where: { id: entry.id, expense_id: savedExpense.id },
+          transaction: t,
+        });
+
+        if (existing) {
+          const updated = await existing.update(
+            {
+              project_id: Number(entry.project_id) || null,
+              purpose: entry.purpose || "Nothing",
+              day: Number(entry.day) || null,
+              destination_name: entry.destination_name,
+              destination_cost: Number(entry.destination_cost) || 0,
+              lodging_cost: Number(entry.lodging_cost) || 0,
+              other_expense_cost: Number(entry.other_expense_cost) || 0,
+              car_rental_cost: Number(entry.car_rental_cost) || 0,
+              miles: Number(entry.miles) || 0,
+              miles_cost: Number(entry.miles_cost) || 0,
+              perdiem_cost: Number(entry.perdiem_cost) || 0,
+              entertainment_cost: Number(entry.entertainment_cost) || 0,
+              miscellaneous_description_id:
+                Number(entry.miscellaneous_description_id) || null,
+              miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+            },
+            { transaction: t }
+          );
+          savedEntries.push(updated);
+        }
+      } else {
+        // create new
+        const created = await ExpenseEntry.create(
+          {
+            expense_id: savedExpense.id,
+            project_id: Number(entry.project_id) || null,
+            purpose: entry.purpose || "Nothing",
+            day: Number(entry.day) || null,
+            destination_name: entry.destination_name,
+            destination_cost: Number(entry.destination_cost) || 0,
+            lodging_cost: Number(entry.lodging_cost) || 0,
+            other_expense_cost: Number(entry.other_expense_cost) || 0,
+            car_rental_cost: Number(entry.car_rental_cost) || 0,
+            miles: Number(entry.miles) || 0,
+            miles_cost: Number(entry.miles_cost) || 0,
+            perdiem_cost: Number(entry.perdiem_cost) || 0,
+            entertainment_cost: Number(entry.entertainment_cost) || 0,
+            miscellaneous_description_id:
+              Number(entry.miscellaneous_description_id) || null,
+            miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+          },
+          { transaction: t }
+        );
+        savedEntries.push(created);
+      }
+    }
+
+    // Handle uploaded receipts (same as before)
     const receiptFiles = req.files || [];
     const receiptEntryIds = req.body.receiptEntryIds || [];
 
     const parsedEntryIds = Array.isArray(receiptEntryIds)
       ? receiptEntryIds
-      : [receiptEntryIds]; // normalize single string to array
+      : [receiptEntryIds];
 
     for (let i = 0; i < receiptFiles.length; i++) {
       const file = receiptFiles[i];
@@ -231,7 +460,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
 
       await ExpenseFile.create(
         {
-          expense_id: Number(savedExpense.id),
+          expense_id: savedExpense.id,
           url: file.path,
           upload_date: new Date(),
         },
