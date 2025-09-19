@@ -103,6 +103,174 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
   }
 };
 
+exports.getTimesheetsVacationReportBiweekly = async (req, res, next) => {
+  const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
+
+  try {
+    // Calculate the date from the previous week
+    const previousWeekDate = new Date(fixed_date);
+    previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
+    const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
+
+    const timesheets = await Timesheet.findAll({
+      where: {
+        week_ending: [fixed_date, previousWeekDateString], // both weeks
+      },
+      include: [
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
+        {
+          model: TimesheetEntry,
+          where: { project_id: 3 },
+        },
+      ],
+    });
+
+    // Send the response
+    res.status(200).json({
+      message: "Request Successful!",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching timesheets:", err);
+    res.status(500).json({
+      message: "Error fetching timesheets",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getTimesheetsBereavementReportBiweekly = async (req, res, next) => {
+  const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
+
+  try {
+    // Calculate the date from the previous week
+    const previousWeekDate = new Date(fixed_date);
+    previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
+    const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
+
+    const timesheets = await Timesheet.findAll({
+      where: {
+        week_ending: [fixed_date, previousWeekDateString], // both weeks
+      },
+      include: [
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
+        {
+          model: TimesheetEntry,
+          where: { project_id: 11 },
+        },
+      ],
+    });
+
+    // Send the response
+    res.status(200).json({
+      message: "Request Successful!",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching timesheets:", err);
+    res.status(500).json({
+      message: "Error fetching timesheets",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getTimesheetsSickReportBiweekly = async (req, res, next) => {
+  const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
+
+  try {
+    // Calculate the date from the previous week
+    const previousWeekDate = new Date(fixed_date);
+    previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
+    const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
+
+    const timesheets = await Timesheet.findAll({
+      where: {
+        week_ending: [fixed_date, previousWeekDateString], // both weeks
+      },
+      include: [
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
+        {
+          model: TimesheetEntry,
+          where: { project_id: 9 },
+        },
+      ],
+    });
+
+    // Send the response
+    res.status(200).json({
+      message: "Request Successful!",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching timesheets:", err);
+    res.status(500).json({
+      message: "Error fetching timesheets",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getTimesheetsJuryDutyReportBiweekly = async (req, res, next) => {
+  const { date } = req.params;
+  const fixed_date = moment(date).format("YYYY-MM-DD");
+
+  try {
+    // Calculate the date from the previous week
+    const previousWeekDate = new Date(fixed_date);
+    previousWeekDate.setDate(previousWeekDate.getDate() - 7); // Subtract 7 days
+    const previousWeekDateString = previousWeekDate.toISOString().split("T")[0];
+
+    const timesheets = await Timesheet.findAll({
+      where: {
+        week_ending: [fixed_date, previousWeekDateString], // both weeks
+      },
+      include: [
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name"],
+        },
+        {
+          model: TimesheetEntry,
+          where: { project_id: 10 },
+        },
+      ],
+    });
+
+    // Send the response
+    res.status(200).json({
+      message: "Request Successful!",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching timesheets:", err);
+    res.status(500).json({
+      message: "Error fetching timesheets",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
 // Get Labor Report (Employee Hours Report) for previous 2 weeks
 exports.getLaborReportBiweekly = async (req, res, next) => {
   const { date } = req.params;

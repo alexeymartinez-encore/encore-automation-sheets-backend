@@ -19,6 +19,30 @@ router.get(
 );
 
 router.get(
+  "/timesheets/vacation-report/:date",
+  isAuth,
+  adminController.getTimesheetsVacationReportBiweekly
+);
+
+router.get(
+  "/timesheets/bereavement-report/:date",
+  isAuth,
+  adminController.getTimesheetsBereavementReportBiweekly
+);
+
+router.get(
+  "/timesheets/sick-report/:date",
+  isAuth,
+  adminController.getTimesheetsSickReportBiweekly
+);
+
+router.get(
+  "/timesheets/juryduty-report/:date",
+  isAuth,
+  adminController.getTimesheetsJuryDutyReportBiweekly
+);
+
+router.get(
   "/timesheets/labor-report/:date",
   isAuth,
   adminController.getLaborReportBiweekly
