@@ -124,7 +124,7 @@ exports.getTimesheetsVacationReportBiweekly = async (req, res, next) => {
         },
         {
           model: TimesheetEntry,
-          where: { project_id: 3 },
+          where: { project_id: process.env.VACATION_PROJECT_ID },
         },
       ],
     });
@@ -166,7 +166,7 @@ exports.getTimesheetsBereavementReportBiweekly = async (req, res, next) => {
         },
         {
           model: TimesheetEntry,
-          where: { project_id: 11 },
+          where: { project_id: process.env.BEREAVEMENT_PROJECT_ID },
         },
       ],
     });
@@ -208,7 +208,7 @@ exports.getTimesheetsSickReportBiweekly = async (req, res, next) => {
         },
         {
           model: TimesheetEntry,
-          where: { project_id: 9 },
+          where: { project_id: process.env.SICK_PROJECT_ID },
         },
       ],
     });
@@ -250,7 +250,7 @@ exports.getTimesheetsJuryDutyReportBiweekly = async (req, res, next) => {
         },
         {
           model: TimesheetEntry,
-          where: { project_id: 10 },
+          where: { project_id: process.env.JURYDUTY_PROJECT_ID },
         },
       ],
     });
