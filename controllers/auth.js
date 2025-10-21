@@ -40,6 +40,7 @@ exports.signup = async (req, res, next) => {
     manager_id,
     is_contractor,
     is_active,
+    allow_overtime,
   } = req.body;
 
   // generate a random salt using crypto
@@ -60,6 +61,7 @@ exports.signup = async (req, res, next) => {
       manager_id: manager_id || null,
       is_contractor,
       is_active,
+      allow_overtime,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

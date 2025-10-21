@@ -91,6 +91,8 @@ router.put(
   adminController.editProjectById
 );
 
+router.put("/employees/edit/:userId", isAuth, adminController.editUserById);
+
 router.put(
   "/timesheets/status-change",
   isAuth,

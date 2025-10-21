@@ -839,9 +839,68 @@ exports.editProjectById = async (req, res, next) => {
     });
   } catch (err) {
     // Log the error details
-    console.error("Error updating event:", err);
+    console.error("Error updating project:", err);
     return res.status(500).json({
-      message: "Error updating event",
+      message: "Error updating project",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+// Editing Projects By Project ID
+exports.editUserById = async (req, res, next) => {
+  try {
+    // Get the date parameter from the request
+    const { userId } = req.params; // Example: "2024-12-01"
+    const userData = req.body; // Array of timesheet data
+
+    if (!userId) {
+      return res.status(400).json({
+        message: "User ID is Required",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    if (!userData) {
+      return res.status(400).json({
+        message: "User Data is Required.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+    // Fetch events where the start field is within the month
+    const user = await Employee.update(
+      {
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        allow_overtime: userData.allow_overtime,
+        cell_phone: userData.cell_phone,
+        email: userData.email,
+        employee_number: userData.employee_number,
+        home_phone: userData.home_phone,
+        is_active: userData.is_active,
+        is_contractor: userData.is_contractor,
+        manager_id: userData.manager_id,
+        position: userData.position,
+        role_id: userData.role_id,
+        user_name: userData.user_name,
+      },
+      { where: { id: userId } }
+    );
+
+    // Send the response
+    return res.status(200).json({
+      data: user,
+      message: "User Edited Successfully",
+      internalStatus: "success",
+    });
+  } catch (err) {
+    // Log the error details
+    console.error("Error updating user:", err);
+    return res.status(500).json({
+      message: "Error updating user",
       error: err.message,
       internalStatus: "fail",
     });
