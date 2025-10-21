@@ -63,6 +63,10 @@ const Employee = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: true,
     },
+    allow_overtime: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+    },
   },
   {
     tableName: "employee", // Explicitly set table name to "Employee"

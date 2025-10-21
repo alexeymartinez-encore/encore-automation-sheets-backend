@@ -1,17 +1,4 @@
-const {
-  Event,
-  Timesheet,
-  Expense,
-  ExpenseEntry,
-  TimesheetEntry,
-  Project,
-  CostCode,
-  Phase,
-  Customer,
-  Employee,
-  Miscellaneous,
-  ExpenseFile,
-} = require("../models");
+const { Event, Employee } = require("../models");
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
 
 // Get timesheets by week ending
