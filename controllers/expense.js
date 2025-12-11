@@ -345,43 +345,29 @@ exports.saveExpenseSheet = async (req, res, next) => {
       const num = (v) => Number(v || 0);
       const str = (v) => (v ?? "").trim();
 
-      const anyPositiveAmount =
-        num(entry.destination_cost) > 0 ||
-        num(entry.lodging_cost) > 0 ||
-        num(entry.other_expense_cost) > 0 ||
-        num(entry.car_rental_cost) > 0 ||
-        num(entry.miles) > 0 ||
-        num(entry.miles_cost) > 0 ||
-        num(entry.perdiem_cost) > 0 ||
-        num(entry.entertainment_cost) > 0 ||
-        num(entry.miscellaneous_amount) > 0;
+      const anyNonZeroAmount =
+        num(entry.destination_cost) !== 0 ||
+        num(entry.lodging_cost) !== 0 ||
+        num(entry.other_expense_cost) !== 0 ||
+        num(entry.car_rental_cost) !== 0 ||
+        num(entry.miles) !== 0 ||
+        num(entry.miles_cost) !== 0 ||
+        num(entry.perdiem_cost) !== 0 ||
+        num(entry.entertainment_cost) !== 0 ||
+        num(entry.miscellaneous_amount) !== 0;
 
       const anyText =
         str(entry.purpose) !== "" || str(entry.destination_name) !== "";
 
-      return anyPositiveAmount || anyText;
+      return anyNonZeroAmount || anyText;
     };
 
     // === Replace-All Strategy for Entries ===
-
-    // Fetch all existing entries for this expense
-    const existingEntries = await ExpenseEntry.findAll({
+    // Clear existing entries so we store exactly what the client sends
+    await ExpenseEntry.destroy({
       where: { expense_id: savedExpense.id },
       transaction: t,
     });
-
-    const incomingIds = expenseEntriesData
-      .map((e) => (e.id ? Number(e.id) : null))
-      .filter(Boolean);
-
-    // Delete entries that are in DB but missing in incoming
-    const toDelete = existingEntries.filter(
-      (dbEntry) => !incomingIds.includes(dbEntry.id)
-    );
-
-    for (const entry of toDelete) {
-      await entry.destroy({ transaction: t });
-    }
 
     // Upsert incoming entries
     const savedEntries = [];
@@ -389,61 +375,29 @@ exports.saveExpenseSheet = async (req, res, next) => {
       const filled = isMeaningfullyFilled(entry);
       if (!filled) continue; // skip empty rows
 
-      if (entry.id) {
-        // update existing
-        const existing = await ExpenseEntry.findOne({
-          where: { id: entry.id, expense_id: savedExpense.id },
-          transaction: t,
-        });
-
-        if (existing) {
-          const updated = await existing.update(
-            {
-              project_id: Number(entry.project_id) || null,
-              purpose: entry.purpose || "Nothing",
-              day: Number(entry.day) || null,
-              destination_name: entry.destination_name,
-              destination_cost: Number(entry.destination_cost) || 0,
-              lodging_cost: Number(entry.lodging_cost) || 0,
-              other_expense_cost: Number(entry.other_expense_cost) || 0,
-              car_rental_cost: Number(entry.car_rental_cost) || 0,
-              miles: Number(entry.miles) || 0,
-              miles_cost: Number(entry.miles_cost) || 0,
-              perdiem_cost: Number(entry.perdiem_cost) || 0,
-              entertainment_cost: Number(entry.entertainment_cost) || 0,
-              miscellaneous_description_id:
-                Number(entry.miscellaneous_description_id) || null,
-              miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-            },
-            { transaction: t }
-          );
-          savedEntries.push(updated);
-        }
-      } else {
-        // create new
-        const created = await ExpenseEntry.create(
-          {
-            expense_id: savedExpense.id,
-            project_id: Number(entry.project_id) || null,
-            purpose: entry.purpose || "Nothing",
-            day: Number(entry.day) || null,
-            destination_name: entry.destination_name,
-            destination_cost: Number(entry.destination_cost) || 0,
-            lodging_cost: Number(entry.lodging_cost) || 0,
-            other_expense_cost: Number(entry.other_expense_cost) || 0,
-            car_rental_cost: Number(entry.car_rental_cost) || 0,
-            miles: Number(entry.miles) || 0,
-            miles_cost: Number(entry.miles_cost) || 0,
-            perdiem_cost: Number(entry.perdiem_cost) || 0,
-            entertainment_cost: Number(entry.entertainment_cost) || 0,
-            miscellaneous_description_id:
-              Number(entry.miscellaneous_description_id) || null,
-            miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-          },
-          { transaction: t }
-        );
-        savedEntries.push(created);
-      }
+      // recreate from scratch to avoid accumulating duplicates across saves
+      const created = await ExpenseEntry.create(
+        {
+          expense_id: savedExpense.id,
+          project_id: Number(entry.project_id) || null,
+          purpose: entry.purpose || "Nothing",
+          day: Number(entry.day) || null,
+          destination_name: entry.destination_name,
+          destination_cost: Number(entry.destination_cost) || 0,
+          lodging_cost: Number(entry.lodging_cost) || 0,
+          other_expense_cost: Number(entry.other_expense_cost) || 0,
+          car_rental_cost: Number(entry.car_rental_cost) || 0,
+          miles: Number(entry.miles) || 0,
+          miles_cost: Number(entry.miles_cost) || 0,
+          perdiem_cost: Number(entry.perdiem_cost) || 0,
+          entertainment_cost: Number(entry.entertainment_cost) || 0,
+          miscellaneous_description_id:
+            Number(entry.miscellaneous_description_id) || 1,
+          miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+        },
+        { transaction: t }
+      );
+      savedEntries.push(created);
     }
 
     // Handle uploaded receipts (same as before)
