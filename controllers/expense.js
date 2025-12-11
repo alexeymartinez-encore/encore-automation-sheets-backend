@@ -371,9 +371,33 @@ exports.saveExpenseSheet = async (req, res, next) => {
 
     // Upsert incoming entries
     const savedEntries = [];
+    const seenKeys = new Set();
     for (const entry of expenseEntriesData) {
       const filled = isMeaningfullyFilled(entry);
       if (!filled) continue; // skip empty rows
+
+      // Deduplicate identical rows in the same payload (protect against UI double-submit)
+      const key = JSON.stringify({
+        day: Number(entry.day) || null,
+        project_id: Number(entry.project_id) || null,
+        purpose: (entry.purpose || "").trim(),
+        destination_name: (entry.destination_name || "").trim(),
+        destination_cost: Number(entry.destination_cost) || 0,
+        lodging_cost: Number(entry.lodging_cost) || 0,
+        other_expense_cost: Number(entry.other_expense_cost) || 0,
+        car_rental_cost: Number(entry.car_rental_cost) || 0,
+        miles: Number(entry.miles) || 0,
+        miles_cost: Number(entry.miles_cost) || 0,
+        perdiem_cost: Number(entry.perdiem_cost) || 0,
+        entertainment_cost: Number(entry.entertainment_cost) || 0,
+        miscellaneous_description_id:
+          Number(entry.miscellaneous_description_id) || 1,
+        miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
+      });
+      if (seenKeys.has(key)) {
+        continue; // drop exact duplicates
+      }
+      seenKeys.add(key);
 
       // recreate from scratch to avoid accumulating duplicates across saves
       const created = await ExpenseEntry.create(
