@@ -16,6 +16,14 @@ const {
   ExpenseFile,
 } = require("../models");
 
+const CATEGORY_PROJECT_MAP = {
+  vacation: process.env.VACATION_PROJECT_ID,
+  sick: process.env.SICK_PROJECT_ID,
+  bereavement: process.env.BEREAVEMENT_PROJECT_ID,
+  juryduty: process.env.JURYDUTY_PROJECT_ID,
+  forbearance: process.env.FORBEARANCE_PROJECT_ID,
+};
+
 // Get timesheets by week ending
 exports.getTimesheetsByWeekEnding = async (req, res, next) => {
   const { weekEnding } = req.params;
@@ -265,6 +273,164 @@ exports.getTimesheetsJuryDutyReportBiweekly = async (req, res, next) => {
     console.error("Error fetching timesheets:", err);
     res.status(500).json({
       message: "Error fetching timesheets",
+      error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+// Fetch timesheet entries for a given category within a date range (optional employee filters)
+exports.getTimesheetEntriesByCategory = async (req, res) => {
+  const { from, to, firstName, lastName, employeeId, category, categoryId } =
+    req.body;
+
+  if (!from || !to) {
+    return res.status(400).json({
+      message: "Both from and to dates are required",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  const fromDate = moment(from);
+  const toDate = moment(to);
+
+  if (!fromDate.isValid() || !toDate.isValid()) {
+    return res.status(400).json({
+      message: "Invalid date format. Use YYYY-MM-DD or ISO strings.",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  const normalizedFrom = fromDate.format("YYYY-MM-DD");
+  const normalizedTo = toDate.format("YYYY-MM-DD");
+
+  const categoryKey = category
+    ? category.toLowerCase().replace(/\s+/g, "")
+    : "";
+  const resolvedCategoryId =
+    categoryId ||
+    CATEGORY_PROJECT_MAP[categoryKey] ||
+    CATEGORY_PROJECT_MAP[category?.toLowerCase() || ""];
+
+  if (!resolvedCategoryId) {
+    return res.status(400).json({
+      message:
+        "A valid category or categoryId is required (e.g., Sick, Vacation, Forbearance).",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  const employeeWhere = {};
+  if (employeeId) employeeWhere.id = employeeId;
+  if (firstName) employeeWhere.first_name = { [Op.like]: `%${firstName}%` };
+  if (lastName) employeeWhere.last_name = { [Op.like]: `%${lastName}%` };
+
+  try {
+    const entries = await TimesheetEntry.findAll({
+      where: { project_id: resolvedCategoryId },
+      include: [
+        {
+          model: Timesheet,
+          required: true,
+          where: {
+            week_ending: {
+              [Op.between]: [normalizedFrom, normalizedTo],
+            },
+          },
+          include: [
+            {
+              model: Employee,
+              attributes: [
+                "id",
+                "first_name",
+                "last_name",
+                "employee_number",
+                "manager_id",
+              ],
+              where:
+                Object.keys(employeeWhere).length > 0
+                  ? employeeWhere
+                  : undefined,
+              required: Object.keys(employeeWhere).length > 0,
+            },
+          ],
+        },
+        {
+          model: Project,
+          attributes: ["id", "number", "description", "short_name"],
+        },
+        {
+          model: Phase,
+          attributes: ["id", "number", "description"],
+        },
+        {
+          model: CostCode,
+          attributes: ["id", "cost_code", "description"],
+        },
+      ],
+    });
+
+    const result = entries.map((entry) => {
+      const entryJson = entry.toJSON();
+      const ts = entryJson.Timesheet || {};
+      const employee = ts.Employee || null;
+
+      return {
+        entry: {
+          id: entryJson.id,
+          timesheet_id: entryJson.timesheet_id,
+          project_id: entryJson.project_id,
+          phase_id: entryJson.phase_id,
+          cost_code_id: entryJson.cost_code_id,
+          row_index: entryJson.row_index,
+          description: entryJson.description,
+          mon_reg: entryJson.mon_reg,
+          tue_reg: entryJson.tue_reg,
+          wed_reg: entryJson.wed_reg,
+          thu_reg: entryJson.thu_reg,
+          fri_reg: entryJson.fri_reg,
+          sat_reg: entryJson.sat_reg,
+          sun_reg: entryJson.sun_reg,
+          mon_ot: entryJson.mon_ot,
+          tue_ot: entryJson.tue_ot,
+          wed_ot: entryJson.wed_ot,
+          thu_ot: entryJson.thu_ot,
+          fri_ot: entryJson.fri_ot,
+          sat_ot: entryJson.sat_ot,
+          sun_ot: entryJson.sun_ot,
+          total_hours: entryJson.total_hours,
+          createdAt: entryJson.createdAt,
+          updatedAt: entryJson.updatedAt,
+        },
+        timesheet: ts
+          ? {
+              id: ts.id,
+              week_ending: ts.week_ending,
+              employee_id: ts.employee_id,
+              approved: ts.approved,
+              processed: ts.processed,
+              signed: ts.signed,
+            }
+          : null,
+        employee,
+        project: entryJson.Project || null,
+        phase: entryJson.Phase || null,
+        cost_code: entryJson.CostCode || null,
+      };
+    });
+
+    return res.status(200).json({
+      message: "Timesheet entries fetched successfully.",
+      data: result,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    console.error("Error fetching timesheet entries by category:", err);
+    return res.status(500).json({
+      message: "Error fetching timesheet entries by category",
       error: err.message,
       internalStatus: "fail",
     });

@@ -93,6 +93,7 @@ exports.login = async (req, res, next) => {
   try {
     // Find User
     const user = await Employee.findOne({ where: { user_name } });
+    console.log(user);
     if (!user) throw new Error("A user with this user_name could not be found");
 
     // Find Auth data for user

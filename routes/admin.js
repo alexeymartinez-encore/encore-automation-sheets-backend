@@ -48,6 +48,12 @@ router.get(
   adminController.getLaborReportBiweekly
 );
 
+router.post(
+  "/timesheets/category-entries",
+  isAuth,
+  adminController.getTimesheetEntriesByCategory
+);
+
 router.get(
   "/expenses/expense-report/:date",
   isAuth,
