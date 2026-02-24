@@ -8,8 +8,10 @@ exports.getAllProjects = async (req, res, next) => {
   try {
     // Fetch all projects from the Project table
     const projects = await Project.findAll({
-      where: { is_active: true },
+      // where: { is_active: true },
     });
+
+    console.log("Fetched Projects:", projects); // Log the fetched projects for debugging
 
     // Return the fetched projects in the response
     res.status(200).json({

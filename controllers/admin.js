@@ -506,6 +506,8 @@ exports.getExpenseReportMonthly = async (req, res) => {
     // Fetch all Expenses for the given date, with Employee and ExpenseEntries in one shot
     const expenses = await Expense.findAll({
       where: {
+        signed: 1,
+        approved: 1,
         date_start: date,
       },
       include: [
@@ -994,7 +996,7 @@ exports.editProjectById = async (req, res, next) => {
         sga_flag: projectData.sga_flag,
         customer_id: projectData.customer_id,
       },
-      { where: { id: projectId } }
+      { where: { id: projectId } },
     );
 
     // Send the response
@@ -1053,7 +1055,7 @@ exports.editUserById = async (req, res, next) => {
         role_id: userData.role_id,
         user_name: userData.user_name,
       },
-      { where: { id: userId } }
+      { where: { id: userId } },
     );
 
     // Send the response
@@ -1118,7 +1120,7 @@ exports.saveTimesheetsStatusChanges = async (req, res, next) => {
           submitted_by,
           updatedAt: new Date(),
         },
-        { where: { id }, transaction }
+        { where: { id }, transaction },
       );
 
       updateResults.push({ id, updated: updatedRows });
@@ -1188,7 +1190,7 @@ exports.saveExpensesStatusChanges = async (req, res, next) => {
           submitted_by,
           updatedAt: new Date(),
         },
-        { where: { id }, transaction }
+        { where: { id }, transaction },
       );
 
       updateResults.push({ id, updated: updatedRows });
@@ -1235,7 +1237,7 @@ exports.createNewProject = async (req, res, next) => {
           name: projectData.customer_name,
           contact: projectData.customer_contact || "",
         },
-        { transaction }
+        { transaction },
       );
       customerId = newCustomer.id;
     }
@@ -1252,7 +1254,7 @@ exports.createNewProject = async (req, res, next) => {
         start_date: projectData.start_date || new Date(),
         end_date: projectData.end_date || new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     await transaction.commit();
