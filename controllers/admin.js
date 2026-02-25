@@ -637,7 +637,7 @@ exports.getOpenExpenseReport = async (req, res) => {
     const expenses = await Expense.findAll({
       where: {
         signed: 1,
-        paid: 0,
+        approved: 1,
         date_start: {
           [Op.lte]: fixed_date, // anything on or before fixed_date
         },
