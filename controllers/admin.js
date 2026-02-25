@@ -638,6 +638,7 @@ exports.getOpenExpenseReport = async (req, res) => {
       where: {
         signed: 1,
         approved: 1,
+        paid: 0,
         date_start: {
           [Op.lte]: fixed_date, // anything on or before fixed_date
         },
