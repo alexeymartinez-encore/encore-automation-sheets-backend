@@ -612,6 +612,8 @@ exports.getExpenseReportMonthly = async (req, res) => {
       })),
     }));
 
+    // console.log("Fetched and formatted expense report data:", result);
+
     // Send back response
     res.status(200).json({
       message: "Expense Report with Entries fetched successfully",
