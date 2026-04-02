@@ -11,9 +11,18 @@ const {
   Miscellaneous,
 } = require("../models");
 
+function getScopedEmployeeWhere(req) {
+  if (Number(req.userRoleId) === 2) {
+    return { manager_id: Number(req.userId) };
+  }
+
+  return null;
+}
+
 // Get timesheets by week ending
 exports.getTimesheetsByWeekEnding = async (req, res, next) => {
   const { weekEnding } = req.params;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
 
   try {
     // Fetch timesheets for the given weekEnding
@@ -24,7 +33,8 @@ exports.getTimesheetsByWeekEnding = async (req, res, next) => {
       include: [
         {
           model: Employee,
-          attributes: ["first_name", "last_name"],
+          attributes: ["first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
       ],
     });
@@ -35,6 +45,7 @@ exports.getTimesheetsByWeekEnding = async (req, res, next) => {
         ...ts.toJSON(),
         first_name: ts.Employee?.first_name ?? null,
         last_name: ts.Employee?.last_name ?? null,
+        manager_id: ts.Employee?.manager_id ?? null,
       };
     });
 
@@ -56,6 +67,7 @@ exports.getTimesheetsByWeekEnding = async (req, res, next) => {
 // Get timesheets overtime for employees
 exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
   const { date } = req.params;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
 
   try {
     // Calculate the date from the previous week
@@ -71,7 +83,8 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
       include: [
         {
           model: Employee,
-          attributes: ["first_name", "last_name"],
+          attributes: ["first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
       ],
     });
@@ -82,6 +95,7 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
         ...ts.toJSON(),
         first_name: ts.Employee?.first_name ?? null,
         last_name: ts.Employee?.last_name ?? null,
+        manager_id: ts.Employee?.manager_id ?? null,
       };
     });
 
@@ -104,6 +118,7 @@ exports.getTimesheetsOvertimeReportBiweekly = async (req, res, next) => {
 // Get timesheets report For last 2 weeks
 exports.getLaborReportBiweekly = async (req, res, next) => {
   const { date } = req.params;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
 
   try {
     // Calculate the previous week date
@@ -119,7 +134,8 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
       include: [
         {
           model: Employee,
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
         {
           model: TimesheetEntry,
@@ -147,6 +163,7 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
         ...ts.toJSON(),
         employee_first_name: ts.Employee?.first_name || "N/A",
         employee_last_name: ts.Employee?.last_name || "N/A",
+        manager_id: ts.Employee?.manager_id ?? null,
       },
       entries: ts.TimesheetEntries.map((entry) => ({
         ...entry.toJSON(),
@@ -178,6 +195,7 @@ exports.getLaborReportBiweekly = async (req, res, next) => {
 // Get Report for expenses monthly
 exports.getExpenseReportMonthly = async (req, res) => {
   const { date } = req.params; // Example input: "2025-08-01"
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
 
   try {
     // Fetch all Expenses for the given date, with Employee and ExpenseEntries in one shot
@@ -194,7 +212,9 @@ exports.getExpenseReportMonthly = async (req, res) => {
             "first_name",
             "last_name",
             "employee_number",
+            "manager_id",
           ],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
         {
           model: ExpenseEntry,
@@ -294,6 +314,7 @@ exports.getExpenseReportMonthly = async (req, res) => {
 // Get Expenses by month start
 exports.getExpensesByMonthStart = async (req, res, next) => {
   const { dateStart } = req.params;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
 
   try {
     // Fetch timesheets for the given weekEnding
@@ -304,7 +325,8 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
       include: [
         {
           model: Employee,
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
       ],
     });
@@ -315,6 +337,7 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
         ...expense.toJSON(),
         first_name: expense.Employee?.first_name ?? null,
         last_name: expense.Employee?.last_name ?? null,
+        manager_id: expense.Employee?.manager_id ?? null,
       };
     });
 
@@ -337,6 +360,8 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
 
 // Get Open Expenses
 exports.getOpenExpenses = async (req, res) => {
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
+
   try {
     // Fetch all signed expenses with the employee attached
     const expenses = await Expense.findAll({
@@ -347,7 +372,14 @@ exports.getOpenExpenses = async (req, res) => {
       include: [
         {
           model: Employee,
-          attributes: ["id", "first_name", "last_name", "employee_number"],
+          attributes: [
+            "id",
+            "first_name",
+            "last_name",
+            "employee_number",
+            "manager_id",
+          ],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
         },
       ],
     });
@@ -360,6 +392,7 @@ exports.getOpenExpenses = async (req, res) => {
         first_name: data.Employee?.first_name || null,
         last_name: data.Employee?.last_name || null,
         employee_number: data.Employee?.employee_number || null,
+        manager_id: data.Employee?.manager_id ?? null,
       };
     });
 
@@ -380,8 +413,12 @@ exports.getOpenExpenses = async (req, res) => {
 
 // Get all belonging Employees
 exports.getAllEmployees = async (req, res, next) => {
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
+
   try {
-    const employees = await Employee.findAll();
+    const employees = await Employee.findAll({
+      ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
+    });
     // Send the response
     res.status(200).json({
       message: "Request Successful!",
