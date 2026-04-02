@@ -1,5 +1,6 @@
 const Timesheet = require("../models/timesheet");
 const TimesheetEntry = require("../models/timesheet_entry");
+const Employee = require("../models/employee");
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
 
 exports.getTimesheetsByUserId = async (req, res, next) => {
@@ -254,6 +255,9 @@ exports.saveTimesheet = async (req, res, next) => {
   } = req.body;
   const actorUserId = Number(req.userId);
   const actorRoleId = Number(req.userRoleId || 0);
+  const ROLE_EMPLOYEE = 1;
+  const ROLE_MANAGER = 2;
+  const ROLE_ADMIN = 3;
 
   if (!timesheetData || typeof timesheetData !== "object") {
     return res.status(400).json({
@@ -263,16 +267,113 @@ exports.saveTimesheet = async (req, res, next) => {
     });
   }
 
-  if (actorRoleId < 2) {
+  if (actorRoleId <= ROLE_EMPLOYEE) {
     timesheetData.employee_id = actorUserId;
   } else if (!timesheetData.employee_id) {
     timesheetData.employee_id = actorUserId;
+  }
+
+  const requestedEmployeeId = Number(timesheetData.employee_id);
+  if (!Number.isInteger(requestedEmployeeId) || requestedEmployeeId <= 0) {
+    return res.status(400).json({
+      message: "A valid employee_id is required.",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  timesheetData.employee_id = requestedEmployeeId;
+
+  if (actorRoleId === ROLE_EMPLOYEE && requestedEmployeeId !== actorUserId) {
+    return res.status(403).json({
+      message: "You can only create timesheets for yourself.",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  if (actorRoleId === ROLE_MANAGER && requestedEmployeeId !== actorUserId) {
+    const managedEmployee = await Employee.findOne({
+      where: {
+        id: requestedEmployeeId,
+        manager_id: actorUserId,
+      },
+      attributes: ["id"],
+    });
+
+    if (!managedEmployee) {
+      return res.status(403).json({
+        message: "You can only create timesheets for your employees.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
   }
 
   const t = await sequelize.transaction(); // Start transaction
 
   try {
     let savedTimesheet;
+
+    if (timesheetData.id) {
+      const existingTimesheet = await Timesheet.findByPk(timesheetData.id, {
+        transaction: t,
+      });
+
+      if (!existingTimesheet) {
+        await t.rollback();
+        return res.status(404).json({
+          message: "Timesheet not found.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      const existingEmployeeId = Number(existingTimesheet.employee_id);
+
+      if (actorRoleId === ROLE_EMPLOYEE && existingEmployeeId !== actorUserId) {
+        await t.rollback();
+        return res.status(403).json({
+          message: "You are not authorized to edit this timesheet.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      if (actorRoleId === ROLE_MANAGER && existingEmployeeId !== actorUserId) {
+        const managedEmployee = await Employee.findOne({
+          where: {
+            id: existingEmployeeId,
+            manager_id: actorUserId,
+          },
+          attributes: ["id"],
+          transaction: t,
+        });
+
+        if (!managedEmployee) {
+          await t.rollback();
+          return res.status(403).json({
+            message: "You are not authorized to edit this timesheet.",
+            data: [],
+            internalStatus: "fail",
+          });
+        }
+      }
+
+      if (actorRoleId < ROLE_ADMIN && requestedEmployeeId !== existingEmployeeId) {
+        await t.rollback();
+        return res.status(403).json({
+          message:
+            "You cannot move an existing timesheet to a different employee.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      if (actorRoleId < ROLE_ADMIN) {
+        timesheetData.employee_id = existingEmployeeId;
+      }
+    }
 
     // Check if a timesheet with the same week_ending already exists for the employee
     if (!timesheetData.id) {
