@@ -15,6 +15,109 @@ const EXPENSE_DATEONLY_ATTRIBUTES = {
   ],
 };
 
+const ROLE_EMPLOYEE = 1;
+const ROLE_MANAGER = 2;
+const ROLE_ADMIN = 3;
+
+function getActorContext(req) {
+  return {
+    actorUserId: Number(req.userId),
+    actorRoleId: Number(req.userRoleId || ROLE_EMPLOYEE),
+  };
+}
+
+async function isManagerOfEmployee(managerId, employeeId, transaction = null) {
+  if (
+    !Number.isInteger(managerId) ||
+    !Number.isInteger(employeeId) ||
+    employeeId <= 0
+  ) {
+    return false;
+  }
+
+  const managedEmployee = await Employee.findOne({
+    where: {
+      id: employeeId,
+      manager_id: managerId,
+    },
+    attributes: ["id"],
+    ...(transaction ? { transaction } : {}),
+  });
+
+  return Boolean(managedEmployee);
+}
+
+async function canAccessEmployee({
+  actorUserId,
+  actorRoleId,
+  employeeId,
+  transaction = null,
+}) {
+  if (!Number.isInteger(employeeId) || employeeId <= 0) {
+    return false;
+  }
+
+  if (actorRoleId >= ROLE_ADMIN) {
+    return true;
+  }
+
+  if (actorRoleId === ROLE_MANAGER) {
+    if (employeeId === actorUserId) {
+      return true;
+    }
+
+    return isManagerOfEmployee(actorUserId, employeeId, transaction);
+  }
+
+  return employeeId === actorUserId;
+}
+
+async function getAuthorizedExpenseForActor(req, expenseId, transaction = null) {
+  const parsedExpenseId = Number(expenseId);
+  if (!Number.isInteger(parsedExpenseId) || parsedExpenseId <= 0) {
+    return {
+      error: {
+        statusCode: 400,
+        message: "A valid expense ID is required.",
+      },
+    };
+  }
+
+  const expense = await Expense.findByPk(parsedExpenseId, {
+    attributes: ["id", "employee_id"],
+    ...(transaction ? { transaction } : {}),
+  });
+
+  if (!expense) {
+    return {
+      error: {
+        statusCode: 404,
+        message: "Expense not found.",
+      },
+    };
+  }
+
+  const { actorUserId, actorRoleId } = getActorContext(req);
+  const employeeId = Number(expense.employee_id);
+  const isAllowed = await canAccessEmployee({
+    actorUserId,
+    actorRoleId,
+    employeeId,
+    transaction,
+  });
+
+  if (!isAllowed) {
+    return {
+      error: {
+        statusCode: 403,
+        message: "You are not authorized to access this expense.",
+      },
+    };
+  }
+
+  return { expense };
+}
+
 function toExpenseResponseModel(expense) {
   const payload = expense?.toJSON ? expense.toJSON() : { ...expense };
   if (payload?.date_start_db) {
@@ -26,18 +129,30 @@ function toExpenseResponseModel(expense) {
 
 // Get Employee Expenses By ID
 exports.getExpensesByUserId = async (req, res, next) => {
-  const userId = req.params.id;
-  const authenticatedUserId = req.userId; // ID From the token (set in isAuth Middleware)
-  if (authenticatedUserId !== userId) {
-    // console.log("Can't see You need to be the user or an admin");
-    const error = new Error(
-      "You are not authorized to view this user's details",
-    );
-    error.statusCode = 403; //forbidden
+  const userId = Number(req.params.id);
+  const { actorUserId, actorRoleId } = getActorContext(req);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    const error = new Error("A valid user ID is required.");
+    error.statusCode = 400;
     return next(error);
   }
 
   try {
+    const isAllowed = await canAccessEmployee({
+      actorUserId,
+      actorRoleId,
+      employeeId: userId,
+    });
+
+    if (!isAllowed) {
+      const error = new Error(
+        "You are not authorized to view this user's details",
+      );
+      error.statusCode = 403;
+      return next(error);
+    }
+
     const expenses = await Expense.findAll({
       where: {
         employee_id: userId,
@@ -105,10 +220,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
     const expenseData = JSON.parse(req.body.expenseData);
     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
     const actorUserId = Number(req.userId);
-    const actorRoleId = Number(req.userRoleId || 0);
-    const ROLE_EMPLOYEE = 1;
-    const ROLE_MANAGER = 2;
-    const ROLE_ADMIN = 3;
+    const actorRoleId = Number(req.userRoleId || ROLE_EMPLOYEE);
 
     // Sanitize dates
     expenseData.date_start = parseToDate(expenseData.date_start);
@@ -436,6 +548,16 @@ exports.deleteExpenseEntry = async (req, res) => {
     }
     const expenseId = entry.expense_id;
 
+    const { error } = await getAuthorizedExpenseForActor(req, expenseId, t);
+    if (error) {
+      await t.rollback();
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     // 2) Delete the entry
     await entry.destroy({ transaction: t });
 
@@ -491,6 +613,15 @@ exports.deleteExpenseSheetById = async (req, res, next) => {
   const expenseId = req.params.id;
 
   try {
+    const { error } = await getAuthorizedExpenseForActor(req, expenseId);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     // Delete all entries associated with this timesheet
     await ExpenseEntry.destroy({
       where: {
@@ -530,6 +661,15 @@ exports.getExpenseEntriesByExpenseId = async (req, res, next) => {
   const expenseId = req.params.id;
 
   try {
+    const { error } = await getAuthorizedExpenseForActor(req, expenseId);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     const expenseEntries = await ExpenseEntry.findAll({
       where: {
         expense_id: expenseId,
@@ -563,6 +703,15 @@ exports.deleteExpenseFileByFileId = async (req, res, next) => {
     if (!fileRecord) {
       return res.status(404).json({
         message: "File not found",
+        internalStatus: "fail",
+      });
+    }
+
+    const { error } = await getAuthorizedExpenseForActor(req, fileRecord.expense_id);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
         internalStatus: "fail",
       });
     }
