@@ -38,6 +38,9 @@ router.get(
   managerController.getExpensesByMonthStart
 );
 
+router.get("/expense/:id", ...requireManager, managerController.getExpenseById);
+router.get("/timesheet/:id", ...requireManager, managerController.getTimesheetById);
+
 router.get("/open-expenses", ...requireManager, managerController.getOpenExpenses);
 
 router.get("/employees/get-all", ...requireManager, managerController.getAllEmployees);

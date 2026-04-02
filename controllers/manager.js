@@ -2,6 +2,7 @@ const {
   Timesheet,
   Expense,
   ExpenseEntry,
+  ExpenseFile,
   TimesheetEntry,
   Project,
   CostCode,
@@ -10,6 +11,7 @@ const {
   Employee,
   Miscellaneous,
 } = require("../models");
+const { Op } = require("sequelize");
 
 function getScopedEmployeeWhere(req) {
   if (Number(req.userRoleId) === 2) {
@@ -17,6 +19,96 @@ function getScopedEmployeeWhere(req) {
   }
 
   return null;
+}
+
+function getUniquePositiveIds(values) {
+  const parsed = (values || [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  return [...new Set(parsed)];
+}
+
+async function validateManagerTimesheetScope(req, timesheetIds) {
+  if (Number(req.userRoleId) !== 2) {
+    return { ok: true };
+  }
+
+  const ids = getUniquePositiveIds(timesheetIds);
+  if (ids.length === 0) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: "At least one valid timesheet ID is required.",
+    };
+  }
+
+  const managerId = Number(req.userId);
+  const ownedRows = await Timesheet.findAll({
+    attributes: ["id"],
+    where: {
+      id: { [Op.in]: ids },
+    },
+    include: [
+      {
+        model: Employee,
+        attributes: [],
+        where: { manager_id: managerId },
+      },
+    ],
+    raw: true,
+  });
+
+  if (ownedRows.length !== ids.length) {
+    return {
+      ok: false,
+      statusCode: 403,
+      message: "Managers can only update timesheets for their employees.",
+    };
+  }
+
+  return { ok: true };
+}
+
+async function validateManagerExpenseScope(req, expenseIds) {
+  if (Number(req.userRoleId) !== 2) {
+    return { ok: true };
+  }
+
+  const ids = getUniquePositiveIds(expenseIds);
+  if (ids.length === 0) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: "At least one valid expense ID is required.",
+    };
+  }
+
+  const managerId = Number(req.userId);
+  const ownedRows = await Expense.findAll({
+    attributes: ["id"],
+    where: {
+      id: { [Op.in]: ids },
+    },
+    include: [
+      {
+        model: Employee,
+        attributes: [],
+        where: { manager_id: managerId },
+      },
+    ],
+    raw: true,
+  });
+
+  if (ownedRows.length !== ids.length) {
+    return {
+      ok: false,
+      statusCode: 403,
+      message: "Managers can only update expenses for their employees.",
+    };
+  }
+
+  return { ok: true };
 }
 
 // Get timesheets by week ending
@@ -472,6 +564,88 @@ exports.getAllProjects = async (req, res, next) => {
   }
 };
 
+exports.getExpenseById = async (req, res, next) => {
+  const expenseId = req.params.id;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
+
+  try {
+    const expenses = await Expense.findAll({
+      where: {
+        id: expenseId,
+      },
+      include: [
+        {
+          model: ExpenseFile,
+        },
+        {
+          model: ExpenseEntry,
+        },
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
+        },
+      ],
+    });
+
+    if (!expenses || expenses.length === 0) {
+      return res.status(404).json({
+        message: "Expense not found.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Expense Sheets Fetched Successfully",
+      data: expenses,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    return next(err);
+  }
+};
+
+exports.getTimesheetById = async (req, res, next) => {
+  const timesheetId = req.params.id;
+  const scopedEmployeeWhere = getScopedEmployeeWhere(req);
+
+  try {
+    const timesheets = await Timesheet.findAll({
+      where: { id: timesheetId },
+      include: [
+        {
+          model: Employee,
+          attributes: ["id", "first_name", "last_name", "manager_id"],
+          ...(scopedEmployeeWhere ? { where: scopedEmployeeWhere } : {}),
+        },
+      ],
+    });
+
+    if (!timesheets || timesheets.length === 0) {
+      return res.status(404).json({
+        message: "Timesheet not found",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Timesheet fetched successfully",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    return next(err);
+  }
+};
+
 exports.editProjectById = async (req, res, next) => {
   try {
     // Get the date parameter from the request
@@ -530,6 +704,18 @@ exports.saveTimesheetsStatusChanges = async (req, res, next) => {
   try {
     if (!timesheetData || timesheetData.length === 0) {
       return res.status(400).json({ message: "No timesheet data provided." });
+    }
+
+    const scopeCheck = await validateManagerTimesheetScope(
+      req,
+      timesheetData.map((timesheet) => timesheet?.id)
+    );
+    if (!scopeCheck.ok) {
+      return res.status(scopeCheck.statusCode).json({
+        message: scopeCheck.message,
+        data: [],
+        internalStatus: "fail",
+      });
     }
 
     // Iterate over the array and perform updates
@@ -594,6 +780,18 @@ exports.saveExpensesStatusChanges = async (req, res, next) => {
     if (!expenseData || expenseData.length === 0) {
       return res.status(400).json({
         message: "No timesheet data provided.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    const scopeCheck = await validateManagerExpenseScope(
+      req,
+      expenseData.map((expense) => expense?.id)
+    );
+    if (!scopeCheck.ok) {
+      return res.status(scopeCheck.statusCode).json({
+        message: scopeCheck.message,
         data: [],
         internalStatus: "fail",
       });

@@ -3,19 +3,134 @@ const TimesheetEntry = require("../models/timesheet_entry");
 const Employee = require("../models/employee");
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
 
-exports.getTimesheetsByUserId = async (req, res, next) => {
-  const userId = req.params.id;
-  const authenticatedUserId = req.userId; // ID From the token (set in isAuth Middleware)
+const ROLE_EMPLOYEE = 1;
+const ROLE_MANAGER = 2;
+const ROLE_ADMIN = 3;
 
-  if (authenticatedUserId !== userId) {
-    const error = new Error(
-      "You are not authorized to view this user's details"
-    );
-    error.statusCode = 403; //forbidden
+function getActorContext(req) {
+  return {
+    actorUserId: Number(req.userId),
+    actorRoleId: Number(req.userRoleId || ROLE_EMPLOYEE),
+  };
+}
+
+async function isManagerOfEmployee(managerId, employeeId, transaction = null) {
+  if (
+    !Number.isInteger(managerId) ||
+    !Number.isInteger(employeeId) ||
+    employeeId <= 0
+  ) {
+    return false;
+  }
+
+  const managedEmployee = await Employee.findOne({
+    where: {
+      id: employeeId,
+      manager_id: managerId,
+    },
+    attributes: ["id"],
+    ...(transaction ? { transaction } : {}),
+  });
+
+  return Boolean(managedEmployee);
+}
+
+async function canAccessEmployee({
+  actorUserId,
+  actorRoleId,
+  employeeId,
+  transaction = null,
+}) {
+  if (!Number.isInteger(employeeId) || employeeId <= 0) {
+    return false;
+  }
+
+  if (actorRoleId >= ROLE_ADMIN) {
+    return true;
+  }
+
+  if (actorRoleId === ROLE_MANAGER) {
+    if (employeeId === actorUserId) {
+      return true;
+    }
+
+    return isManagerOfEmployee(actorUserId, employeeId, transaction);
+  }
+
+  return employeeId === actorUserId;
+}
+
+async function getAuthorizedTimesheetForActor(req, timesheetId, transaction = null) {
+  const parsedTimesheetId = Number(timesheetId);
+  if (!Number.isInteger(parsedTimesheetId) || parsedTimesheetId <= 0) {
+    return {
+      error: {
+        statusCode: 400,
+        message: "A valid timesheet ID is required.",
+      },
+    };
+  }
+
+  const timesheet = await Timesheet.findByPk(parsedTimesheetId, {
+    attributes: ["id", "employee_id"],
+    ...(transaction ? { transaction } : {}),
+  });
+
+  if (!timesheet) {
+    return {
+      error: {
+        statusCode: 404,
+        message: "Timesheet not found.",
+      },
+    };
+  }
+
+  const { actorUserId, actorRoleId } = getActorContext(req);
+  const employeeId = Number(timesheet.employee_id);
+  const isAllowed = await canAccessEmployee({
+    actorUserId,
+    actorRoleId,
+    employeeId,
+    transaction,
+  });
+
+  if (!isAllowed) {
+    return {
+      error: {
+        statusCode: 403,
+        message: "You are not authorized to access this timesheet.",
+      },
+    };
+  }
+
+  return { timesheet };
+}
+
+exports.getTimesheetsByUserId = async (req, res, next) => {
+  const userId = Number(req.params.id);
+  const { actorUserId, actorRoleId } = getActorContext(req);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    const error = new Error("A valid user ID is required.");
+    error.statusCode = 400;
     return next(error);
   }
 
   try {
+    const isAllowed = await canAccessEmployee({
+      actorUserId,
+      actorRoleId,
+      employeeId: userId,
+    });
+
+    if (!isAllowed) {
+      const error = new Error(
+        "You are not authorized to view this user's details"
+      );
+      error.statusCode = 403;
+      return next(error);
+    }
+
     const timesheets = await Timesheet.findAll({
       where: {
         employee_id: userId,
@@ -62,6 +177,15 @@ exports.getTimesheetEntriesByTimesheetId = async (req, res, next) => {
   const timesheetId = req.params.id;
 
   try {
+    const { error } = await getAuthorizedTimesheetForActor(req, timesheetId);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     const timesheetEntries = await TimesheetEntry.findAll({
       where: {
         timesheet_id: timesheetId,
@@ -87,6 +211,15 @@ exports.editTimesheetEntries = async (req, res, next) => {
 
     if (!timesheetId || !entries) {
       return res.status(400).json({ message: "Invalid request data" });
+    }
+
+    const { error } = await getAuthorizedTimesheetForActor(req, timesheetId);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
     }
 
     const savedEntries = await Promise.all(
@@ -194,11 +327,53 @@ exports.deleteTimesheetEntryById = async (req, res, next) => {
   const timesheetEntryId = req.params.id;
 
   try {
+    const parsedEntryId = Number(timesheetEntryId);
+    if (!Number.isInteger(parsedEntryId) || parsedEntryId <= 0) {
+      return res.status(400).json({
+        message: "A valid timesheet entry ID is required.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    const existingEntry = await TimesheetEntry.findByPk(parsedEntryId, {
+      attributes: ["id", "timesheet_id"],
+    });
+
+    if (!existingEntry) {
+      return res.status(404).json({
+        message: "Timesheet entry not found.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    const { error } = await getAuthorizedTimesheetForActor(
+      req,
+      existingEntry.timesheet_id
+    );
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     const timesheetEntry = await TimesheetEntry.destroy({
       where: {
-        id: timesheetEntryId,
+        id: parsedEntryId,
       },
     });
+
+    if (!timesheetEntry) {
+      return res.status(404).json({
+        message: "Timesheet entry not found.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     res.status(200).json({
       message: "Timesheet Entry Deleted Successfully",
       data: timesheetEntry,
@@ -216,6 +391,15 @@ exports.deleteTimesheetById = async (req, res, next) => {
   const timesheetId = req.params.id;
 
   try {
+    const { error } = await getAuthorizedTimesheetForActor(req, timesheetId);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     // Delete all entries associated with this timesheet
     await TimesheetEntry.destroy({
       where: {
@@ -254,10 +438,7 @@ exports.saveTimesheet = async (req, res, next) => {
     timesheetEntryData, // Array of timesheet entries
   } = req.body;
   const actorUserId = Number(req.userId);
-  const actorRoleId = Number(req.userRoleId || 0);
-  const ROLE_EMPLOYEE = 1;
-  const ROLE_MANAGER = 2;
-  const ROLE_ADMIN = 3;
+  const actorRoleId = Number(req.userRoleId || ROLE_EMPLOYEE);
 
   if (!timesheetData || typeof timesheetData !== "object") {
     return res.status(400).json({
@@ -523,10 +704,15 @@ exports.saveTimesheet = async (req, res, next) => {
 };
 
 exports.signTimesheetById = async (req, res, next) => {
-  const timesheetIdParams = req.params.id;
+  const timesheetIdParams = Number(req.params.id);
   const { timesheet_id, signed, signed_by } = req.body;
+  const bodyTimesheetId = Number(timesheet_id);
 
-  if (timesheetIdParams !== timesheet_id) {
+  if (
+    !Number.isInteger(timesheetIdParams) ||
+    !Number.isInteger(bodyTimesheetId) ||
+    timesheetIdParams !== bodyTimesheetId
+  ) {
     const error = new Error(
       "Timesheet Id in request param does not match the one in request body body"
     );
@@ -535,11 +721,28 @@ exports.signTimesheetById = async (req, res, next) => {
   }
 
   try {
+    const { error } = await getAuthorizedTimesheetForActor(req, timesheetIdParams);
+    if (error) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     const timesheet = await Timesheet.findOne({
       where: {
-        id: timesheet_id,
+        id: bodyTimesheetId,
       },
     });
+
+    if (!timesheet) {
+      return res.status(404).json({
+        message: "Timesheet not found.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
 
     timesheet.update({
       signed: signed,
