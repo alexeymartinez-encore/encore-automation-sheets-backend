@@ -4,6 +4,7 @@ const { sequelize } = require("../config/db");
 const Employee = require("./employee");
 const Role = require("./role");
 const Authentication = require("./authentication");
+const AuthSession = require("./auth_session");
 const Color = require("./color");
 const Timesheet = require("./timesheet");
 const TimesheetEntry = require("./timesheet_entry");
@@ -94,6 +95,9 @@ PurchaseOrder.belongsTo(Customer, { foreignKey: "customer_id" });
 Employee.hasOne(Authentication, { foreignKey: "user_id", onDelete: "CASCADE" });
 Authentication.belongsTo(Employee, { foreignKey: "user_id" });
 
+Employee.hasMany(AuthSession, { foreignKey: "user_id", onDelete: "CASCADE" });
+AuthSession.belongsTo(Employee, { foreignKey: "user_id" });
+
 Employee.belongsTo(Role, { foreignKey: "role_id", onDelete: "CASCADE" });
 Role.hasMany(Employee, { foreignKey: "role_id" });
 
@@ -115,6 +119,7 @@ module.exports = {
   Employee,
   Role,
   Authentication,
+  AuthSession,
   Color,
   Timesheet,
   TimesheetEntry,

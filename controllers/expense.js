@@ -65,6 +65,37 @@ exports.getExpensesByUserId = async (req, res, next) => {
   }
 };
 
+exports.getMyExpenses = async (req, res, next) => {
+  const userId = String(req.userId);
+
+  try {
+    const expenses = await Expense.findAll({
+      where: {
+        employee_id: userId,
+      },
+      attributes: EXPENSE_DATEONLY_ATTRIBUTES,
+      include: [
+        {
+          model: ExpenseFile,
+        },
+      ],
+    });
+
+    const normalizedExpenses = expenses.map(toExpenseResponseModel);
+
+    res.status(200).json({
+      message: "Expense Sheets Fetched Successfully",
+      data: normalizedExpenses,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
+};
+
 // Save Expense Sheet with Replace-All Strategy
 exports.saveExpenseSheet = async (req, res, next) => {
   const t = await sequelize.transaction(); // Start transaction
@@ -72,10 +103,18 @@ exports.saveExpenseSheet = async (req, res, next) => {
   try {
     const expenseData = JSON.parse(req.body.expenseData);
     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
+    const actorUserId = Number(req.userId);
+    const actorRoleId = Number(req.userRoleId || 0);
 
     // Sanitize dates
     expenseData.date_start = parseToDate(expenseData.date_start);
     expenseData.date_paid = parseToDate(expenseData.date_paid);
+
+    if (actorRoleId < 2) {
+      expenseData.employee_id = actorUserId;
+    } else if (!expenseData.employee_id) {
+      expenseData.employee_id = actorUserId;
+    }
 
     let savedExpense;
 

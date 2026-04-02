@@ -5,6 +5,8 @@ const isAuth = require("../middleware/is-auth");
 
 const router = express.Router();
 
+router.get("/me", isAuth, timesheetController.getMyTimesheets);
+
 // Get All Timesheets By USer ID
 router.get("/:id", isAuth, timesheetController.getTimesheetsByUserId);
 

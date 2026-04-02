@@ -1,5 +1,6 @@
 const Employee = require("../models/employee");
 const Authentication = require("../models/authentication");
+const AuthSession = require("../models/auth_session");
 
 async function findEmployeeByEmail(email, options = {}) {
   return Employee.findOne({
@@ -59,6 +60,39 @@ async function updateAuthenticationByUserId(userId, updates, options = {}) {
   return authRecord.update(updates, options);
 }
 
+async function createSession(payload, options = {}) {
+  return AuthSession.create(payload, options);
+}
+
+async function findSessionById(sessionId, options = {}) {
+  return AuthSession.findByPk(sessionId, options);
+}
+
+async function updateSessionById(sessionId, updates, options = {}) {
+  const session = await findSessionById(sessionId, options);
+
+  if (!session) {
+    return null;
+  }
+
+  return session.update(updates, options);
+}
+
+async function revokeSessionById(sessionId, reason = "logout", options = {}) {
+  const session = await findSessionById(sessionId, options);
+  if (!session) {
+    return null;
+  }
+
+  return session.update(
+    {
+      revoked_at: new Date(),
+      revoked_reason: reason,
+    },
+    options
+  );
+}
+
 module.exports = {
   findEmployeeByEmail,
   findEmployeeByUserName,
@@ -69,4 +103,8 @@ module.exports = {
   findAuthenticationByUserId,
   createAuthentication,
   updateAuthenticationByUserId,
+  createSession,
+  findSessionById,
+  updateSessionById,
+  revokeSessionById,
 };

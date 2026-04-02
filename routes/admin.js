@@ -2,139 +2,141 @@ const express = require("express");
 
 const adminController = require("../controllers/admin");
 const isAuth = require("../middleware/is-auth");
+const authorizeRole = require("../middleware/authorize-role");
 
 const router = express.Router();
+const requireAdmin = [isAuth, authorizeRole("admin")];
 
 router.get(
   "/timesheets/missing/:weekEnding",
-  isAuth,
+  ...requireAdmin,
   adminController.getMissingTimesheetsByWeekEnding
 );
 
 router.post(
   "/timesheets/missing/remind",
-  isAuth,
+  ...requireAdmin,
   adminController.sendMissingTimesheetReminders
 );
 
 router.get(
   "/timesheets/:weekEnding",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsByWeekEnding
 );
 
 // Get Overtime report for the previous 2 weeks
 router.get(
   "/timesheets/overtime-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsOvertimeReportBiweekly
 );
 
 router.get(
   "/timesheets/vacation-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsVacationReportBiweekly
 );
 
 router.get(
   "/timesheets/bereavement-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsBereavementReportBiweekly
 );
 
 router.get(
   "/timesheets/sick-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsSickReportBiweekly
 );
 
 router.get(
   "/timesheets/juryduty-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetsJuryDutyReportBiweekly
 );
 
 router.get(
   "/timesheets/labor-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getLaborReportBiweekly
 );
 
 router.post(
   "/timesheets/category-entries",
-  isAuth,
+  ...requireAdmin,
   adminController.getTimesheetEntriesByCategory
 );
 
 router.get(
   "/expenses/missing/:dateStart",
-  isAuth,
+  ...requireAdmin,
   adminController.getMissingExpensesByMonthStart
 );
 
 router.post(
   "/expenses/missing/remind",
-  isAuth,
+  ...requireAdmin,
   adminController.sendMissingExpenseReminders
 );
 
 router.get(
   "/expenses/expense-report/:date",
-  isAuth,
+  ...requireAdmin,
   adminController.getExpenseReportMonthly
 );
 
 router.get(
   "/expenses/expense-report-open/:dateStart",
-  isAuth,
+  ...requireAdmin,
   adminController.getOpenExpenseReport
 );
 
 router.get(
   "/expenses/:dateStart",
-  isAuth,
+  ...requireAdmin,
   adminController.getExpensesByMonthStart
 );
-router.get("/expense/:id", isAuth, adminController.getExpenseById);
-router.get("/timesheet/:id", isAuth, adminController.getTimesheetById);
-router.get("/open-timesheets", isAuth, adminController.getOpenTimesheets);
+router.get("/expense/:id", ...requireAdmin, adminController.getExpenseById);
+router.get("/timesheet/:id", ...requireAdmin, adminController.getTimesheetById);
+router.get("/open-timesheets", ...requireAdmin, adminController.getOpenTimesheets);
 
 router.get(
   "/open-expenses/:dateStart",
-  isAuth,
+  ...requireAdmin,
   adminController.getOpenExpenses
 );
 
-router.get("/employees/get-all", isAuth, adminController.getAllEmployees);
+router.get("/employees/get-all", ...requireAdmin, adminController.getAllEmployees);
 
-router.get("/projects/get-all", isAuth, adminController.getAllProjects);
+router.get("/projects/get-all", ...requireAdmin, adminController.getAllProjects);
 
 router.delete(
   "/projects/delete/:id",
-  isAuth,
+  ...requireAdmin,
   adminController.deleteProjectById
 );
 
 router.put(
   "/projects/edit/:projectId",
-  isAuth,
+  ...requireAdmin,
   adminController.editProjectById
 );
 
-router.put("/employees/edit/:userId", isAuth, adminController.editUserById);
+router.put("/employees/edit/:userId", ...requireAdmin, adminController.editUserById);
 
 router.put(
   "/timesheets/status-change",
-  isAuth,
+  ...requireAdmin,
   adminController.saveTimesheetsStatusChanges
 );
 
 router.put(
   "/expenses/status-change",
-  isAuth,
+  ...requireAdmin,
   adminController.saveExpensesStatusChanges
 );
 
-router.post("/projects/create", isAuth, adminController.createNewProject);
+router.post("/projects/create", ...requireAdmin, adminController.createNewProject);
 
 module.exports = router;

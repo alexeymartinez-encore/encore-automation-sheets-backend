@@ -2,7 +2,20 @@ const { validationResult } = require("express-validator");
 
 const { createHttpError } = require("../util/http-error");
 
-const AUTH_COOKIE_MAX_AGE_MS = 60 * 60 * 1000;
+const ACCESS_COOKIE_NAME = "token";
+const REFRESH_COOKIE_NAME = "refresh_token";
+const CSRF_COOKIE_NAME = "csrf_token";
+
+const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000;
+const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const ABSOLUTE_SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+const IDLE_WARNING_WINDOW_MS = 2 * 60 * 1000;
+
+function isProductionEnvironment() {
+  const normalized = String(process.env.NODE_ENV || "").toLowerCase();
+  return normalized === "production" || normalized === "prod";
+}
 
 function assertValidRequest(req) {
   const errors = validationResult(req);
@@ -138,33 +151,119 @@ function toSignupResponse(result) {
   };
 }
 
+function toUserPayload(user) {
+  if (!user) {
+    return null;
+  }
+
+  const source = user.dataValues ? user.dataValues : user;
+
+  return {
+    id: source.id,
+    user_id: source.id,
+    employee_number: source.employee_number,
+    user_name: source.user_name,
+    first_name: source.first_name,
+    last_name: source.last_name,
+    manager_id: source.manager_id,
+    position: source.position,
+    cell_phone: source.cell_phone,
+    home_phone: source.home_phone,
+    email: source.email,
+    role_id: source.role_id,
+    is_contractor: source.is_contractor,
+    is_active: source.is_active,
+    allow_overtime: source.allow_overtime,
+    manager_name: source.manager_name || null,
+  };
+}
+
+function toSessionPayload(session) {
+  if (!session) {
+    return null;
+  }
+
+  return {
+    access_expires_at: session.accessExpiresAt,
+    idle_expires_at: session.idleExpiresAt,
+    absolute_expires_at: session.absoluteExpiresAt,
+    warning_starts_at: session.warningStartsAt,
+    server_time: session.serverTime,
+  };
+}
+
 function toLoginResponse(result) {
   return {
     message: "Login successful",
-    user: {
-      ...result.user.dataValues,
-      manager_name: result.managerName,
-    },
+    user: toUserPayload(result.user),
+    session: toSessionPayload(result.session),
     status: 200,
-    expiresIn: result.expiresAt,
     totalEmployees: result.totalEmployees,
   };
 }
 
-function toCookieOptions() {
+function toRefreshResponse(result) {
+  return {
+    message: "Session refreshed",
+    user: toUserPayload(result.user),
+    session: toSessionPayload(result.session),
+    status: 200,
+  };
+}
+
+function toVerifyResponse(result) {
+  return {
+    user: toUserPayload(result.user),
+    session: toSessionPayload(result.session),
+    totalEmployees: result.totalEmployees ?? null,
+  };
+}
+
+function toAccessCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProductionEnvironment(),
     sameSite: "Lax",
-    maxAge: AUTH_COOKIE_MAX_AGE_MS,
+    maxAge: ACCESS_TOKEN_MAX_AGE_MS,
+    path: "/",
+  };
+}
+
+function toRefreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: isProductionEnvironment(),
+    sameSite: "Lax",
+    maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+    path: "/",
+  };
+}
+
+function toCsrfCookieOptions() {
+  return {
+    httpOnly: false,
+    secure: isProductionEnvironment(),
+    sameSite: "Lax",
+    maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+    path: "/",
   };
 }
 
 function toLogoutCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProductionEnvironment(),
     sameSite: "Lax",
+    path: "/",
+  };
+}
+
+function toLogoutCsrfCookieOptions() {
+  return {
+    httpOnly: false,
+    secure: isProductionEnvironment(),
+    sameSite: "Lax",
+    path: "/",
   };
 }
 
@@ -180,14 +279,16 @@ function toResetPasswordResponse() {
   };
 }
 
-function toVerifyResponse(result) {
-  return {
-    user: result.user,
-  };
-}
-
 module.exports = {
-  AUTH_COOKIE_MAX_AGE_MS,
+  ACCESS_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  ACCESS_TOKEN_MAX_AGE_MS,
+  REFRESH_TOKEN_MAX_AGE_MS,
+  IDLE_TIMEOUT_MS,
+  ABSOLUTE_SESSION_MAX_AGE_MS,
+  IDLE_WARNING_WINDOW_MS,
+  isProductionEnvironment,
   assertValidRequest,
   toSignupCommand,
   toLoginCommand,
@@ -195,9 +296,13 @@ module.exports = {
   toResetPasswordCommand,
   toSignupResponse,
   toLoginResponse,
-  toCookieOptions,
+  toRefreshResponse,
+  toVerifyResponse,
+  toAccessCookieOptions,
+  toRefreshCookieOptions,
+  toCsrfCookieOptions,
   toLogoutCookieOptions,
+  toLogoutCsrfCookieOptions,
   toPasswordResetRequestResponse,
   toResetPasswordResponse,
-  toVerifyResponse,
 };

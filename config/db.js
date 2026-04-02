@@ -22,6 +22,8 @@ const sequelize = new Sequelize(
 async function initializeDB() {
   try {
     await sequelize.authenticate();
+    const AuthSession = require("../models/auth_session");
+    await AuthSession.sync();
     console.log("Connected to database");
   } catch (error) {
     console.error("DB connection failed:", error.message);
