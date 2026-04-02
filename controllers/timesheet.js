@@ -34,6 +34,29 @@ exports.getTimesheetsByUserId = async (req, res, next) => {
   }
 };
 
+exports.getMyTimesheets = async (req, res, next) => {
+  const userId = String(req.userId);
+
+  try {
+    const timesheets = await Timesheet.findAll({
+      where: {
+        employee_id: userId,
+      },
+    });
+
+    res.status(200).json({
+      message: "Timesheet Fetched!",
+      data: timesheets,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
+};
+
 exports.getTimesheetEntriesByTimesheetId = async (req, res, next) => {
   const timesheetId = req.params.id;
 
@@ -229,6 +252,22 @@ exports.saveTimesheet = async (req, res, next) => {
     timesheetData, // Timesheet data
     timesheetEntryData, // Array of timesheet entries
   } = req.body;
+  const actorUserId = Number(req.userId);
+  const actorRoleId = Number(req.userRoleId || 0);
+
+  if (!timesheetData || typeof timesheetData !== "object") {
+    return res.status(400).json({
+      message: "Timesheet payload is required.",
+      data: [],
+      internalStatus: "fail",
+    });
+  }
+
+  if (actorRoleId < 2) {
+    timesheetData.employee_id = actorUserId;
+  } else if (!timesheetData.employee_id) {
+    timesheetData.employee_id = actorUserId;
+  }
 
   const t = await sequelize.transaction(); // Start transaction
 

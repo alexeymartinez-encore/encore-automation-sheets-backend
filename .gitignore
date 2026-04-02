@@ -3,6 +3,7 @@ db_individual_creations
 nginx
 Dockerfile
 uploads
+scripts
 
 .env.development
 .env.production

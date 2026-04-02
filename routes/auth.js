@@ -54,7 +54,8 @@ router.put(
 );
 
 router.post("/login", authController.login);
-router.post("/logout", isAuth, authController.logout);
+router.post("/refresh", authController.refresh);
+router.post("/logout", authController.logout);
 router.post("/request-reset", authController.requestPasswordReset);
 router.post("/reset-password", authController.resetPassword);
 router.get("/verify", isAuth, authController.verifyMe);

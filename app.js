@@ -1,6 +1,7 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const csrfProtection = require("./middleware/csrf-protection");
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
@@ -19,14 +20,26 @@ app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
 
-const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:5173";
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
-    origin: allowedOrigin,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Origin not allowed by CORS policy"));
+    },
     credentials: true, // Required for cookie-based auth
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "X-CSRF-Token"],
   })
 );
+
+app.use(csrfProtection);
 
 // API Routes
 app.use("/auth", authRoutes);

@@ -3,9 +3,25 @@ const ExpenseEntry = require("../models/expense_entry");
 const ExpenseFile = require("../models/expense_file");
 const fs = require("fs");
 const path = require("path");
+const { literal } = require("sequelize");
 
 const { sequelize } = require("../config/db"); // Import the Sequelize instance
 const { parseToDate } = require("../util/dateParser");
+
+const EXPENSE_DATEONLY_ATTRIBUTES = {
+  include: [
+    [literal("CONVERT(varchar(10), [Expense].[date_start], 23)"), "date_start_db"],
+  ],
+};
+
+function toExpenseResponseModel(expense) {
+  const payload = expense?.toJSON ? expense.toJSON() : { ...expense };
+  if (payload?.date_start_db) {
+    payload.date_start = payload.date_start_db;
+  }
+  delete payload.date_start_db;
+  return payload;
+}
 
 // Get Employee Expenses By ID
 exports.getExpensesByUserId = async (req, res, next) => {
@@ -14,7 +30,7 @@ exports.getExpensesByUserId = async (req, res, next) => {
   if (authenticatedUserId !== userId) {
     // console.log("Can't see You need to be the user or an admin");
     const error = new Error(
-      "You are not authorized to view this user's details"
+      "You are not authorized to view this user's details",
     );
     error.statusCode = 403; //forbidden
     return next(error);
@@ -25,6 +41,7 @@ exports.getExpensesByUserId = async (req, res, next) => {
       where: {
         employee_id: userId,
       },
+      attributes: EXPENSE_DATEONLY_ATTRIBUTES,
       include: [
         {
           model: ExpenseFile,
@@ -32,9 +49,12 @@ exports.getExpensesByUserId = async (req, res, next) => {
       ],
     });
 
+    const normalizedExpenses = expenses.map(toExpenseResponseModel);
+    console.log(normalizedExpenses);
+
     res.status(200).json({
       message: "Expense Sheets Fetched Successfully",
-      data: expenses,
+      data: normalizedExpenses,
       internalStatus: "success",
     });
   } catch (err) {
@@ -45,224 +65,36 @@ exports.getExpensesByUserId = async (req, res, next) => {
   }
 };
 
-// Save Expense Sheet with ID and Data
-// exports.saveExpenseSheet = async (req, res, next) => {
-//   const t = await sequelize.transaction(); // Start transaction
+exports.getMyExpenses = async (req, res, next) => {
+  const userId = String(req.userId);
 
-//   try {
-//     const expenseData = JSON.parse(req.body.expenseData);
-//     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
+  try {
+    const expenses = await Expense.findAll({
+      where: {
+        employee_id: userId,
+      },
+      attributes: EXPENSE_DATEONLY_ATTRIBUTES,
+      include: [
+        {
+          model: ExpenseFile,
+        },
+      ],
+    });
 
-//     // Sanitize dates
-//     expenseData.date_start = parseToDate(expenseData.date_start);
-//     expenseData.date_paid = parseToDate(expenseData.date_paid);
+    const normalizedExpenses = expenses.map(toExpenseResponseModel);
 
-//     let savedExpense;
-
-//     // Check for duplicate expense (by employee_id + date_start)
-//     if (!expenseData.id) {
-//       const existingExpense = await Expense.findOne({
-//         where: {
-//           employee_id: expenseData.employee_id,
-//           date_start: expenseData.date_start,
-//         },
-//         transaction: t,
-//       });
-
-//       if (existingExpense) {
-//         await t.rollback();
-//         return res.status(200).json({
-//           message: "Expense Already Exists (Existing Date)",
-//           data: { expense: [], entries: [] },
-//           internalStatus: "fail",
-//         });
-//       }
-//     }
-
-//     // Save or update the Expense
-//     if (expenseData.id) {
-//       await Expense.update(
-//         {
-//           approved: expenseData.approved || false,
-//           approved_by: expenseData.approved_by || "None",
-//           date_paid: expenseData.date_paid || null,
-//           employee_id: Number(expenseData.employee_id),
-//           message: expenseData.message || "None",
-//           paid: expenseData.paid || false,
-//           processed_by: expenseData.processed_by || "None",
-//           signed: expenseData.signed || false,
-//           submitted_by: expenseData.submitted_by || "None",
-//           num_of_days: expenseData.num_of_days,
-//           date_start: expenseData.date_start,
-//           total: expenseData.total,
-//         },
-//         { where: { id: expenseData.id }, transaction: t }
-//       );
-//       savedExpense = await Expense.findByPk(expenseData.id, { transaction: t });
-//     } else {
-//       savedExpense = await Expense.create(
-//         {
-//           approved: expenseData.approved || false,
-//           approved_by: expenseData.approved_by || "None",
-//           date_paid: expenseData.date_paid || null,
-//           employee_id: Number(expenseData.employee_id),
-//           message: expenseData.message || "None",
-//           paid: expenseData.paid || false,
-//           processed_by: expenseData.processed_by || "None",
-//           signed: expenseData.signed || false,
-//           submitted_by: expenseData.submitted_by || "None",
-//           num_of_days: expenseData.num_of_days,
-//           date_start: expenseData.date_start,
-//           total: expenseData.total,
-//         },
-//         { transaction: t }
-//       );
-
-//       if (!savedExpense.id) throw new Error("Failed to save expense");
-//     }
-
-//     //  shared predicate to define “meaningfully filled”
-//     const isMeaningfullyFilled = (entry) => {
-//       const num = (v) => Number(v || 0);
-//       const str = (v) => (v ?? "").trim();
-
-//       const anyPositiveAmount =
-//         num(entry.destination_cost) > 0 ||
-//         num(entry.lodging_cost) > 0 ||
-//         num(entry.other_expense_cost) > 0 ||
-//         num(entry.car_rental_cost) > 0 ||
-//         num(entry.miles) > 0 ||
-//         num(entry.miles_cost) > 0 ||
-//         num(entry.perdiem_cost) > 0 ||
-//         num(entry.entertainment_cost) > 0 ||
-//         num(entry.miscellaneous_amount) > 0;
-
-//       const anyText =
-//         str(entry.purpose) !== "" || str(entry.destination_name) !== "";
-
-//       // Do NOT count project_id alone as meaningful
-//       return anyPositiveAmount || anyText;
-//     };
-
-//     // Save or update expense entries
-//     const savedEntries = await Promise.all(
-//       expenseEntriesData.map(async (entry) => {
-//         const creatingNew = !entry.id;
-
-//         // skip creating totally empty rows
-//         if (creatingNew && !isMeaningfullyFilled(entry)) {
-//           return null;
-//         }
-
-//         if (entry.id) {
-//           const existingEntry = await ExpenseEntry.findOne({
-//             where: { id: entry.id },
-//             transaction: t,
-//           });
-
-//           if (!existingEntry) {
-//             throw new Error(`Expense entry with ID ${entry.id} not found`);
-//           }
-
-//           //   if user cleared an existing row, delete it
-//           if (!isMeaningfullyFilled(entry)) {
-//             await existingEntry.destroy({ transaction: t });
-//             return null;
-//           }
-
-//           return existingEntry.update(
-//             {
-//               project_id: Number(entry.project_id) || 2,
-//               purpose: entry.purpose || "Nothing",
-//               day: Number(entry.day) || null,
-//               destination_name: entry.destination_name,
-//               destination_cost: Number(entry.destination_cost) || 0,
-//               lodging_cost: Number(entry.lodging_cost) || 0,
-//               other_expense_cost: Number(entry.other_expense_cost) || 0,
-//               car_rental_cost: Number(entry.car_rental_cost) || 0,
-//               miles: Number(entry.miles) || 0,
-//               miles_cost: Number(entry.miles_cost) || 0,
-//               perdiem_cost: Number(entry.perdiem_cost) || 0,
-//               entertainment_cost: Number(entry.entertainment_cost) || 0,
-//               miscellaneous_description_id:
-//                 Number(entry.miscellaneous_description_id) || 1,
-//               miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-//             },
-//             { transaction: t }
-//           );
-//         } else {
-//           // Only reached if meaningfully filled
-//           return ExpenseEntry.create(
-//             {
-//               expense_id: Number(savedExpense.id),
-//               project_id: Number(entry.project_id) || 2,
-//               purpose: entry.purpose || "Nothing",
-//               day: Number(entry.day) || null,
-//               destination_name: entry.destination_name,
-//               destination_cost: Number(entry.destination_cost) || 0,
-//               lodging_cost: Number(entry.lodging_cost) || 0,
-//               other_expense_cost: Number(entry.other_expense_cost) || 0,
-//               car_rental_cost: Number(entry.car_rental_cost) || 0,
-//               miles: Number(entry.miles) || 0,
-//               miles_cost: Number(entry.miles_cost) || 0,
-//               perdiem_cost: Number(entry.perdiem_cost) || 0,
-//               entertainment_cost: Number(entry.entertainment_cost) || 0,
-//               miscellaneous_description_id:
-//                 Number(entry.miscellaneous_description_id) || 1,
-//               miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
-//             },
-//             { transaction: t }
-//           );
-//         }
-//       })
-//     );
-
-//     // Handle uploaded receipts and map them to correct entry
-//     const receiptFiles = req.files || [];
-//     const receiptEntryIds = req.body.receiptEntryIds || [];
-
-//     const parsedEntryIds = Array.isArray(receiptEntryIds)
-//       ? receiptEntryIds
-//       : [receiptEntryIds]; // normalize single string to array
-
-//     for (let i = 0; i < receiptFiles.length; i++) {
-//       const file = receiptFiles[i];
-//       const entryId = parsedEntryIds[i];
-
-//       await ExpenseFile.create(
-//         {
-//           expense_id: Number(savedExpense.id),
-//           url: file.path,
-//           upload_date: new Date(),
-//         },
-//         { transaction: t }
-//       );
-//     }
-
-//     // Commit transaction
-//     await t.commit();
-
-//     return res.status(200).json({
-//       message: "Expense Saved Successfully",
-//       data: { expense: savedExpense, entries: savedEntries },
-//       internalStatus: "success",
-//     });
-//   } catch (error) {
-//     try {
-//       if (t && !t.finished && t.finished !== "rollback") {
-//         await t.rollback();
-//       }
-//     } catch (rollbackError) {
-//       console.error("Rollback failed:", rollbackError.message);
-//     }
-
-//     console.error("Error saving expense and entries:", error);
-//     return res.status(500).json({
-//       message: "Error saving expense and entries",
-//       error: error.message,
-//     });
-//   }
-// };
+    res.status(200).json({
+      message: "Expense Sheets Fetched Successfully",
+      data: normalizedExpenses,
+      internalStatus: "success",
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
+};
 
 // Save Expense Sheet with Replace-All Strategy
 exports.saveExpenseSheet = async (req, res, next) => {
@@ -271,10 +103,18 @@ exports.saveExpenseSheet = async (req, res, next) => {
   try {
     const expenseData = JSON.parse(req.body.expenseData);
     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
+    const actorUserId = Number(req.userId);
+    const actorRoleId = Number(req.userRoleId || 0);
 
     // Sanitize dates
     expenseData.date_start = parseToDate(expenseData.date_start);
     expenseData.date_paid = parseToDate(expenseData.date_paid);
+
+    if (actorRoleId < 2) {
+      expenseData.employee_id = actorUserId;
+    } else if (!expenseData.employee_id) {
+      expenseData.employee_id = actorUserId;
+    }
 
     let savedExpense;
 
@@ -315,7 +155,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
           date_start: expenseData.date_start,
           total: expenseData.total,
         },
-        { where: { id: expenseData.id }, transaction: t }
+        { where: { id: expenseData.id }, transaction: t },
       );
       savedExpense = await Expense.findByPk(expenseData.id, { transaction: t });
     } else {
@@ -334,7 +174,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
           date_start: expenseData.date_start,
           total: expenseData.total,
         },
-        { transaction: t }
+        { transaction: t },
       );
     }
 
@@ -419,7 +259,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
             Number(entry.miscellaneous_description_id) || 1,
           miscellaneous_amount: Number(entry.miscellaneous_amount) || 0,
         },
-        { transaction: t }
+        { transaction: t },
       );
       savedEntries.push(created);
     }
@@ -442,7 +282,7 @@ exports.saveExpenseSheet = async (req, res, next) => {
           url: file.path,
           upload_date: new Date(),
         },
-        { transaction: t }
+        { transaction: t },
       );
     }
 
@@ -520,7 +360,7 @@ exports.deleteExpenseEntry = async (req, res) => {
     // 4) Update the Expense.total
     await Expense.update(
       { total: Number(newTotal.toFixed(2)) },
-      { where: { id: expenseId }, transaction: t }
+      { where: { id: expenseId }, transaction: t },
     );
 
     await t.commit();

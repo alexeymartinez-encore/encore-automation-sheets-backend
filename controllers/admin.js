@@ -1,6 +1,7 @@
 const { sequelize } = require("../config/db");
 const moment = require("moment");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
+const { sendMail } = require("../util/mailer");
 
 const {
   Timesheet,
@@ -23,6 +24,285 @@ const CATEGORY_PROJECT_MAP = {
   juryduty: process.env.JURYDUTY_PROJECT_ID,
   forbearance: process.env.FORBEARANCE_PROJECT_ID,
 };
+
+const EXPENSE_DATEONLY_ATTRIBUTES = {
+  include: [
+    [literal("CONVERT(varchar(10), [Expense].[date_start], 23)"), "date_start_db"],
+  ],
+};
+
+function normalizeExpenseDateStartRecord(expense) {
+  const payload = expense?.toJSON ? expense.toJSON() : { ...expense };
+  if (payload?.date_start_db) {
+    payload.date_start = payload.date_start_db;
+  }
+  delete payload.date_start_db;
+  return payload;
+}
+
+function normalizeDateOnly(value) {
+  const normalized = moment(value).format("YYYY-MM-DD");
+  return normalized === "Invalid date" ? null : normalized;
+}
+
+function normalizeEmployeeIds(employeeIds) {
+  const rawIds = Array.isArray(employeeIds)
+    ? employeeIds
+    : employeeIds
+    ? [employeeIds]
+    : [];
+
+  return rawIds
+    .map((employeeId) => Number(employeeId))
+    .filter((employeeId) => Number.isInteger(employeeId) && employeeId > 0);
+}
+
+function buildPortalLink() {
+  const baseUrl = (process.env.RESET_PASSWORD_LINK || "").replace(/\/$/, "");
+  return baseUrl ? `${baseUrl}/employee-portal` : null;
+}
+
+function buildReminderContent({ employee, submissionType, periodValue }) {
+  const isTimesheetReminder = submissionType === "timesheet";
+  const displayName = `${employee.first_name} ${employee.last_name}`.trim();
+  const periodLabel = isTimesheetReminder
+    ? `week ending ${moment(periodValue).format("MMMM D, YYYY")}`
+    : moment(periodValue).format("MMMM YYYY");
+  const statusMessage =
+    employee.submission_status === "draft"
+      ? isTimesheetReminder
+        ? `Our records show you have started a timesheet for the ${periodLabel}, but it is not signed yet.`
+        : `Our records show you have started an expense sheet for ${periodLabel}, but it is not signed yet.`
+      : isTimesheetReminder
+      ? `Our records show you have not submitted a signed timesheet for the ${periodLabel}.`
+      : `Our records show you have not submitted a signed expense sheet for ${periodLabel}.`;
+  const portalLink = buildPortalLink();
+  const subject = isTimesheetReminder
+    ? `Reminder: submit your timesheet for ${periodLabel}`
+    : `Reminder: submit your expense sheet for ${periodLabel}`;
+  const actionLabel = isTimesheetReminder
+    ? "review and submit your timesheet"
+    : "review and submit your expense sheet";
+
+  return {
+    subject,
+    html: `
+      <p>Hello ${displayName || "team member"},</p>
+      <p>${statusMessage}</p>
+      <p>Please ${actionLabel} as soon as possible so payroll and closing tasks can stay on schedule.</p>
+      ${
+        portalLink
+          ? `<p><a href="${portalLink}">Open the Employee Portal</a></p>`
+          : ""
+      }
+      <p>If you already completed it, you can ignore this reminder.</p>
+      <p>Encore Admin</p>
+    `,
+  };
+}
+
+function mapMissingEmployees(activeEmployees, submissionRecords) {
+  const recordsByEmployeeId = submissionRecords.reduce((collection, record) => {
+    const employeeId = Number(record.employee_id);
+    if (!collection.has(employeeId)) {
+      collection.set(employeeId, []);
+    }
+    collection.get(employeeId).push(record);
+    return collection;
+  }, new Map());
+
+  return activeEmployees.reduce((missingEmployees, employee) => {
+    const records = [...(recordsByEmployeeId.get(employee.id) || [])].sort(
+      (first, second) =>
+        new Date(second.updatedAt || second.createdAt) -
+        new Date(first.updatedAt || first.createdAt)
+    );
+    const signedRecord = records.find((record) => Boolean(record.signed));
+
+    if (signedRecord) {
+      return missingEmployees;
+    }
+
+    const latestRecord = records[0] || null;
+    missingEmployees.push({
+      id: employee.id,
+      first_name: employee.first_name,
+      last_name: employee.last_name,
+      email: employee.email,
+      manager_id: employee.manager_id,
+      submission_status: latestRecord ? "draft" : "not_started",
+      existing_record_id: latestRecord?.id || null,
+      last_activity_at:
+        latestRecord?.updatedAt || latestRecord?.createdAt || null,
+    });
+    return missingEmployees;
+  }, []);
+}
+
+async function getActiveEmployees(employeeIds = []) {
+  const where = {
+    is_active: true,
+  };
+
+  if (employeeIds.length > 0) {
+    where.id = {
+      [Op.in]: employeeIds,
+    };
+  }
+
+  return Employee.findAll({
+    where,
+    attributes: [
+      "id",
+      "first_name",
+      "last_name",
+      "email",
+      "manager_id",
+      "is_active",
+    ],
+    order: [
+      ["last_name", "ASC"],
+      ["first_name", "ASC"],
+    ],
+  });
+}
+
+async function getMissingTimesheetSummary(weekEnding, employeeIds = []) {
+  const normalizedWeekEnding = normalizeDateOnly(weekEnding);
+  if (!normalizedWeekEnding) {
+    return null;
+  }
+
+  const activeEmployees = await getActiveEmployees(employeeIds);
+  const activeEmployeeIds = activeEmployees.map((employee) => employee.id);
+
+  if (activeEmployeeIds.length === 0) {
+    return {
+      periodValue: normalizedWeekEnding,
+      activeEmployeeCount: 0,
+      completedCount: 0,
+      missingEmployees: [],
+    };
+  }
+
+  const timesheets = await Timesheet.findAll({
+    where: {
+      employee_id: {
+        [Op.in]: activeEmployeeIds,
+      },
+      week_ending: normalizedWeekEnding,
+    },
+    attributes: [
+      "id",
+      "employee_id",
+      "signed",
+      "approved",
+      "processed",
+      "createdAt",
+      "updatedAt",
+    ],
+  });
+
+  const missingEmployees = mapMissingEmployees(activeEmployees, timesheets);
+
+  return {
+    periodValue: normalizedWeekEnding,
+    activeEmployeeCount: activeEmployees.length,
+    completedCount: activeEmployees.length - missingEmployees.length,
+    missingEmployees,
+  };
+}
+
+async function getMissingExpenseSummary(dateStart, employeeIds = []) {
+  const normalizedDateStart = normalizeDateOnly(dateStart);
+  if (!normalizedDateStart) {
+    return null;
+  }
+
+  const activeEmployees = await getActiveEmployees(employeeIds);
+  const activeEmployeeIds = activeEmployees.map((employee) => employee.id);
+
+  if (activeEmployeeIds.length === 0) {
+    return {
+      periodValue: normalizedDateStart,
+      activeEmployeeCount: 0,
+      completedCount: 0,
+      missingEmployees: [],
+    };
+  }
+
+  const expenses = await Expense.findAll({
+    where: {
+      employee_id: {
+        [Op.in]: activeEmployeeIds,
+      },
+      date_start: normalizedDateStart,
+    },
+    attributes: [
+      "id",
+      "employee_id",
+      "signed",
+      "approved",
+      "paid",
+      "createdAt",
+      "updatedAt",
+    ],
+  });
+
+  const missingEmployees = mapMissingEmployees(activeEmployees, expenses);
+
+  return {
+    periodValue: normalizedDateStart,
+    activeEmployeeCount: activeEmployees.length,
+    completedCount: activeEmployees.length - missingEmployees.length,
+    missingEmployees,
+  };
+}
+
+async function sendReminderEmails({
+  employees,
+  submissionType,
+  periodValue,
+}) {
+  const results = await Promise.allSettled(
+    employees.map(async (employee) => {
+      const emailContent = buildReminderContent({
+        employee,
+        submissionType,
+        periodValue,
+      });
+
+      await sendMail({
+        from: process.env.EMAIL_USER,
+        to: employee.email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      });
+
+      return {
+        id: employee.id,
+        email: employee.email,
+        first_name: employee.first_name,
+        last_name: employee.last_name,
+      };
+    })
+  );
+
+  return results.reduce(
+    (summary, result) => {
+      if (result.status === "fulfilled") {
+        summary.sentRecipients.push(result.value);
+      } else {
+        summary.failedRecipients.push(result.reason?.message || "Send failed");
+      }
+      return summary;
+    },
+    {
+      sentRecipients: [],
+      failedRecipients: [],
+    }
+  );
+}
 
 // Get timesheets by week ending
 exports.getTimesheetsByWeekEnding = async (req, res, next) => {
@@ -60,6 +340,98 @@ exports.getTimesheetsByWeekEnding = async (req, res, next) => {
     res.status(500).json({
       message: "Error fetching timesheets",
       error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getMissingTimesheetsByWeekEnding = async (req, res) => {
+  const { weekEnding } = req.params;
+
+  try {
+    const summary = await getMissingTimesheetSummary(weekEnding);
+
+    if (!summary) {
+      return res.status(400).json({
+        message: "A valid week ending date is required.",
+        data: null,
+        internalStatus: "fail",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Missing timesheets fetched successfully.",
+      data: summary,
+      internalStatus: "success",
+    });
+  } catch (error) {
+    console.error("Error fetching missing timesheets:", error);
+    return res.status(500).json({
+      message: "Error fetching missing timesheets.",
+      error: error.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.sendMissingTimesheetReminders = async (req, res) => {
+  const { weekEnding, employeeIds = [] } = req.body;
+
+  try {
+    const summary = await getMissingTimesheetSummary(
+      weekEnding,
+      normalizeEmployeeIds(employeeIds)
+    );
+
+    if (!summary) {
+      return res.status(400).json({
+        message: "A valid week ending date is required.",
+        data: null,
+        internalStatus: "fail",
+      });
+    }
+
+    if (summary.missingEmployees.length === 0) {
+      return res.status(200).json({
+        message: "No active employees are currently missing that timesheet.",
+        data: {
+          sentCount: 0,
+          failedCount: 0,
+          recipients: [],
+        },
+        internalStatus: "success",
+      });
+    }
+
+    const reminderResults = await sendReminderEmails({
+      employees: summary.missingEmployees,
+      submissionType: "timesheet",
+      periodValue: summary.periodValue,
+    });
+
+    const sentCount = reminderResults.sentRecipients.length;
+    const failedCount = reminderResults.failedRecipients.length;
+
+    return res.status(sentCount > 0 ? 200 : 500).json({
+      message:
+        sentCount > 0
+          ? `Sent ${sentCount} timesheet reminder${
+              sentCount === 1 ? "" : "s"
+            }${failedCount > 0 ? `, ${failedCount} failed.` : "."}`
+          : "Timesheet reminder emails could not be sent.",
+      data: {
+        sentCount,
+        failedCount,
+        recipients: reminderResults.sentRecipients,
+        failedRecipients: reminderResults.failedRecipients,
+      },
+      internalStatus: sentCount > 0 ? "success" : "fail",
+    });
+  } catch (error) {
+    console.error("Error sending timesheet reminders:", error);
+    return res.status(500).json({
+      message: "Error sending timesheet reminders.",
+      error: error.message,
       internalStatus: "fail",
     });
   }
@@ -612,7 +984,6 @@ exports.getExpenseReportMonthly = async (req, res) => {
       })),
     }));
 
-    // console.log("Fetched and formatted expense report data:", result);
 
     // Send back response
     res.status(200).json({
@@ -804,6 +1175,98 @@ exports.getExpensesByMonthStart = async (req, res, next) => {
     res.status(500).json({
       message: "Error fetching timesheets",
       error: err.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.getMissingExpensesByMonthStart = async (req, res) => {
+  const { dateStart } = req.params;
+
+  try {
+    const summary = await getMissingExpenseSummary(dateStart);
+
+    if (!summary) {
+      return res.status(400).json({
+        message: "A valid month start date is required.",
+        data: null,
+        internalStatus: "fail",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Missing expenses fetched successfully.",
+      data: summary,
+      internalStatus: "success",
+    });
+  } catch (error) {
+    console.error("Error fetching missing expenses:", error);
+    return res.status(500).json({
+      message: "Error fetching missing expenses.",
+      error: error.message,
+      internalStatus: "fail",
+    });
+  }
+};
+
+exports.sendMissingExpenseReminders = async (req, res) => {
+  const { dateStart, employeeIds = [] } = req.body;
+
+  try {
+    const summary = await getMissingExpenseSummary(
+      dateStart,
+      normalizeEmployeeIds(employeeIds)
+    );
+
+    if (!summary) {
+      return res.status(400).json({
+        message: "A valid month start date is required.",
+        data: null,
+        internalStatus: "fail",
+      });
+    }
+
+    if (summary.missingEmployees.length === 0) {
+      return res.status(200).json({
+        message: "No active employees are currently missing that expense sheet.",
+        data: {
+          sentCount: 0,
+          failedCount: 0,
+          recipients: [],
+        },
+        internalStatus: "success",
+      });
+    }
+
+    const reminderResults = await sendReminderEmails({
+      employees: summary.missingEmployees,
+      submissionType: "expense",
+      periodValue: summary.periodValue,
+    });
+
+    const sentCount = reminderResults.sentRecipients.length;
+    const failedCount = reminderResults.failedRecipients.length;
+
+    return res.status(sentCount > 0 ? 200 : 500).json({
+      message:
+        sentCount > 0
+          ? `Sent ${sentCount} expense reminder${
+              sentCount === 1 ? "" : "s"
+            }${failedCount > 0 ? `, ${failedCount} failed.` : "."}`
+          : "Expense reminder emails could not be sent.",
+      data: {
+        sentCount,
+        failedCount,
+        recipients: reminderResults.sentRecipients,
+        failedRecipients: reminderResults.failedRecipients,
+      },
+      internalStatus: sentCount > 0 ? "success" : "fail",
+    });
+  } catch (error) {
+    console.error("Error sending expense reminders:", error);
+    return res.status(500).json({
+      message: "Error sending expense reminders.",
+      error: error.message,
       internalStatus: "fail",
     });
   }
@@ -1317,6 +1780,7 @@ exports.getExpenseById = async (req, res, next) => {
       where: {
         id: expenseId,
       },
+      attributes: EXPENSE_DATEONLY_ATTRIBUTES,
       include: [
         {
           model: ExpenseFile,
@@ -1330,10 +1794,11 @@ exports.getExpenseById = async (req, res, next) => {
         },
       ],
     });
+    const normalizedExpenses = expenses.map(normalizeExpenseDateStartRecord);
 
     res.status(200).json({
       message: "Expense Sheets Fetched Successfully",
-      data: expenses,
+      data: normalizedExpenses,
       internalStatus: "success",
     });
   } catch (err) {

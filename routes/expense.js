@@ -6,10 +6,13 @@ const upload = require("../middleware/multer-middleware"); // Path to your multe
 
 const router = express.Router();
 
+router.get("/me", isAuth, expenseController.getMyExpenses);
+
 router.get("/:id", isAuth, expenseController.getExpensesByUserId);
 
 router.post(
   "/save",
+  isAuth,
   upload.array("receipts"),
   expenseController.saveExpenseSheet
 );

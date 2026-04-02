@@ -2,61 +2,63 @@ const express = require("express");
 
 const managerController = require("../controllers/manager");
 const isAuth = require("../middleware/is-auth");
+const authorizeRole = require("../middleware/authorize-role");
 
 const router = express.Router();
+const requireManager = [isAuth, authorizeRole(["manager", "admin"])];
 
 router.get(
   "/timesheets/:weekEnding",
-  isAuth,
+  ...requireManager,
   managerController.getTimesheetsByWeekEnding
 );
 
 // Get Overtime report for the previous 2 weeks
 router.get(
   "/timesheets/overtime-report/:date",
-  isAuth,
+  ...requireManager,
   managerController.getTimesheetsOvertimeReportBiweekly
 );
 
 router.get(
   "/timesheets/labor-report/:date",
-  isAuth,
+  ...requireManager,
   managerController.getLaborReportBiweekly
 );
 
 router.get(
   "/timesheets/expense-report/:date",
-  isAuth,
+  ...requireManager,
   managerController.getExpenseReportMonthly
 );
 
 router.get(
   "/expenses/:dateStart",
-  isAuth,
+  ...requireManager,
   managerController.getExpensesByMonthStart
 );
 
-router.get("/open-expenses", isAuth, managerController.getOpenExpenses);
+router.get("/open-expenses", ...requireManager, managerController.getOpenExpenses);
 
-router.get("/employees/get-all", isAuth, managerController.getAllEmployees);
+router.get("/employees/get-all", ...requireManager, managerController.getAllEmployees);
 
-router.get("/projects/get-all", isAuth, managerController.getAllProjects);
+router.get("/projects/get-all", ...requireManager, managerController.getAllProjects);
 
 router.put(
   "/projects/edit/:projectId",
-  isAuth,
+  ...requireManager,
   managerController.editProjectById
 );
 
 router.put(
   "/timesheets/status-change",
-  isAuth,
+  ...requireManager,
   managerController.saveTimesheetsStatusChanges
 );
 
 router.put(
   "/expenses/status-change",
-  isAuth,
+  ...requireManager,
   managerController.saveExpensesStatusChanges
 );
 
