@@ -6,6 +6,18 @@ const isAuth = require("../middleware/is-auth");
 const router = express.Router();
 
 router.get(
+  "/timesheets/missing/:weekEnding",
+  isAuth,
+  adminController.getMissingTimesheetsByWeekEnding
+);
+
+router.post(
+  "/timesheets/missing/remind",
+  isAuth,
+  adminController.sendMissingTimesheetReminders
+);
+
+router.get(
   "/timesheets/:weekEnding",
   isAuth,
   adminController.getTimesheetsByWeekEnding
@@ -52,6 +64,18 @@ router.post(
   "/timesheets/category-entries",
   isAuth,
   adminController.getTimesheetEntriesByCategory
+);
+
+router.get(
+  "/expenses/missing/:dateStart",
+  isAuth,
+  adminController.getMissingExpensesByMonthStart
+);
+
+router.post(
+  "/expenses/missing/remind",
+  isAuth,
+  adminController.sendMissingExpenseReminders
 );
 
 router.get(

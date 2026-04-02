@@ -4,6 +4,7 @@ const { sequelize } = require("../config/db");
 const Employee = require("./employee");
 const Role = require("./role");
 const Authentication = require("./authentication");
+const Color = require("./color");
 const Timesheet = require("./timesheet");
 const TimesheetEntry = require("./timesheet_entry");
 const ExpenseFile = require("./expense_file");
@@ -16,6 +17,8 @@ const Expense = require("./expense");
 const ExpenseEntry = require("./expense_entry");
 const Miscellaneous = require("./miscellaneous");
 const Event = require("./event");
+const EventType = require("./event_type");
+const EventMetadata = require("./event_metadata");
 
 // Associations
 Employee.hasMany(Timesheet, { foreignKey: "employee_id", onDelete: "CASCADE" });
@@ -97,11 +100,22 @@ Role.hasMany(Employee, { foreignKey: "role_id" });
 Event.belongsTo(Employee, { foreignKey: "employee_id", onDelete: "CASCADE" });
 Employee.hasMany(Event, { foreignKey: "employee_id", onDelete: "CASCADE" });
 
+Event.hasOne(EventMetadata, { foreignKey: "event_id", onDelete: "CASCADE" });
+EventMetadata.belongsTo(Event, { foreignKey: "event_id", onDelete: "CASCADE" });
+
+EventType.hasMany(EventMetadata, {
+  foreignKey: "event_type_id",
+  // MSSQL does not support ON DELETE RESTRICT; NO ACTION is the equivalent.
+  onDelete: "NO ACTION",
+});
+EventMetadata.belongsTo(EventType, { foreignKey: "event_type_id" });
+
 module.exports = {
   sequelize,
   Employee,
   Role,
   Authentication,
+  Color,
   Timesheet,
   TimesheetEntry,
   ExpenseFile,
@@ -114,4 +128,6 @@ module.exports = {
   ExpenseEntry,
   Miscellaneous,
   Event,
+  EventType,
+  EventMetadata,
 };

@@ -11,8 +11,6 @@ exports.getAllProjects = async (req, res, next) => {
       // where: { is_active: true },
     });
 
-    console.log("Fetched Projects:", projects); // Log the fetched projects for debugging
-
     // Return the fetched projects in the response
     res.status(200).json({
       success: true,
