@@ -1,6 +1,7 @@
 const Expense = require("../models/expense");
 const ExpenseEntry = require("../models/expense_entry");
 const ExpenseFile = require("../models/expense_file");
+const Employee = require("../models/employee");
 const fs = require("fs");
 const path = require("path");
 const { literal } = require("sequelize");
@@ -105,18 +106,121 @@ exports.saveExpenseSheet = async (req, res, next) => {
     const expenseEntriesData = JSON.parse(req.body.expenseEntriesData);
     const actorUserId = Number(req.userId);
     const actorRoleId = Number(req.userRoleId || 0);
+    const ROLE_EMPLOYEE = 1;
+    const ROLE_MANAGER = 2;
+    const ROLE_ADMIN = 3;
 
     // Sanitize dates
     expenseData.date_start = parseToDate(expenseData.date_start);
     expenseData.date_paid = parseToDate(expenseData.date_paid);
 
-    if (actorRoleId < 2) {
+    if (actorRoleId <= ROLE_EMPLOYEE) {
       expenseData.employee_id = actorUserId;
     } else if (!expenseData.employee_id) {
       expenseData.employee_id = actorUserId;
     }
 
+    const requestedEmployeeId = Number(expenseData.employee_id);
+    if (!Number.isInteger(requestedEmployeeId) || requestedEmployeeId <= 0) {
+      await t.rollback();
+      return res.status(400).json({
+        message: "A valid employee_id is required.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    expenseData.employee_id = requestedEmployeeId;
+
+    if (actorRoleId === ROLE_EMPLOYEE && requestedEmployeeId !== actorUserId) {
+      await t.rollback();
+      return res.status(403).json({
+        message: "You can only create expenses for yourself.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
+    if (actorRoleId === ROLE_MANAGER && requestedEmployeeId !== actorUserId) {
+      const managedEmployee = await Employee.findOne({
+        where: {
+          id: requestedEmployeeId,
+          manager_id: actorUserId,
+        },
+        attributes: ["id"],
+        transaction: t,
+      });
+
+      if (!managedEmployee) {
+        await t.rollback();
+        return res.status(403).json({
+          message: "You can only create expenses for your employees.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+    }
+
     let savedExpense;
+
+    if (expenseData.id) {
+      const existingExpense = await Expense.findByPk(expenseData.id, {
+        transaction: t,
+      });
+
+      if (!existingExpense) {
+        await t.rollback();
+        return res.status(404).json({
+          message: "Expense not found.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      const existingEmployeeId = Number(existingExpense.employee_id);
+
+      if (actorRoleId === ROLE_EMPLOYEE && existingEmployeeId !== actorUserId) {
+        await t.rollback();
+        return res.status(403).json({
+          message: "You are not authorized to edit this expense.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      if (actorRoleId === ROLE_MANAGER && existingEmployeeId !== actorUserId) {
+        const managedEmployee = await Employee.findOne({
+          where: {
+            id: existingEmployeeId,
+            manager_id: actorUserId,
+          },
+          attributes: ["id"],
+          transaction: t,
+        });
+
+        if (!managedEmployee) {
+          await t.rollback();
+          return res.status(403).json({
+            message: "You are not authorized to edit this expense.",
+            data: [],
+            internalStatus: "fail",
+          });
+        }
+      }
+
+      if (actorRoleId < ROLE_ADMIN && requestedEmployeeId !== existingEmployeeId) {
+        await t.rollback();
+        return res.status(403).json({
+          message: "You cannot move an existing expense to a different employee.",
+          data: [],
+          internalStatus: "fail",
+        });
+      }
+
+      if (actorRoleId < ROLE_ADMIN) {
+        expenseData.employee_id = existingEmployeeId;
+      }
+    }
 
     // Check for duplicate expense (by employee_id + date_start) only when creating new
     if (!expenseData.id) {
