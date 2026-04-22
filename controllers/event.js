@@ -244,9 +244,17 @@ function buildComposedTitle(
   eventTypeLabel,
   note,
   fallbackTitle = "",
+  isHoliday = false,
 ) {
   const trimmedNote = String(note || "").trim();
   const safeType = String(eventTypeLabel || "").trim();
+
+  if (isHoliday) {
+    const holidayTitle = safeType || String(fallbackTitle || "").trim();
+    return trimmedNote && holidayTitle
+      ? `${holidayTitle} (${trimmedNote})`
+      : holidayTitle;
+  }
 
   const firstName = String(employee?.first_name || "").trim();
   const lastName = String(employee?.last_name || "").trim();
@@ -342,6 +350,7 @@ function mapEventRecord(eventInstance) {
     eventType?.label,
     note,
     event.title,
+    Boolean(eventType?.is_holiday),
   );
 
   return {
@@ -452,10 +461,6 @@ async function queryEvents({
     ],
   };
 
-  if (employeeIds.length > 0) {
-    where.employee_id = { [Op.in]: employeeIds };
-  }
-
   const metadataInclude = {
     model: EventMetadata,
     required: eventTypeIds.length > 0,
@@ -489,6 +494,13 @@ async function queryEvents({
   });
 
   let mapped = events.map(mapEventRecord);
+
+  if (employeeIds.length > 0) {
+    mapped = mapped.filter(
+      (event) =>
+        event.is_holiday || employeeIds.includes(Number(event.employee_id)),
+    );
+  }
 
   const trimmedSearch = String(search || "")
     .trim()
@@ -563,28 +575,6 @@ async function saveOrUpdateEvent({ eventId = null, payload = {}, actorId }) {
     throw error;
   }
 
-  const requestedEmployeeId = Number(
-    payload.employee_id || existingEvent?.employee_id || actorId,
-  );
-  const employeeId = canAssignOtherEmployees
-    ? requestedEmployeeId
-    : Number(actorId);
-  if (!employeeId) {
-    const error = new Error("employee_id is required.");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const employee = await Employee.findByPk(employeeId, {
-    attributes: ["id", "first_name", "last_name"],
-  });
-
-  if (!employee) {
-    const error = new Error("Employee not found.");
-    error.statusCode = 404;
-    throw error;
-  }
-
   const startDate = toDateOnly(payload.start || existingEvent?.start);
   const endDate = toDateOnly(
     payload.end_date ||
@@ -606,6 +596,13 @@ async function saveOrUpdateEvent({ eventId = null, payload = {}, actorId }) {
   }
 
   const existingMetadataRecord = getEventMetadataRecord(existingEvent);
+  const existingEventType = getMetadataEventType(existingMetadataRecord);
+
+  if (existingEventType?.is_holiday && actorRoleId !== 3) {
+    const error = new Error("Only admins can edit holidays.");
+    error.statusCode = 403;
+    throw error;
+  }
 
   const eventType = await resolveEventType({
     eventTypeId:
@@ -617,6 +614,36 @@ async function saveOrUpdateEvent({ eventId = null, payload = {}, actorId }) {
     backColor: payload.back_color_id || existingEvent?.back_color_id,
     foreColor: payload.fore_color_id || existingEvent?.fore_color_id,
   });
+
+  if (eventType?.is_holiday && actorRoleId !== 3) {
+    const error = new Error("Only admins can create or edit holidays.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const requestedEmployeeId = Number(
+    payload.employee_id || existingEvent?.employee_id || actorId,
+  );
+  const employeeId = eventType?.is_holiday
+    ? Number(actorId)
+    : canAssignOtherEmployees
+      ? requestedEmployeeId
+      : Number(actorId);
+  if (!employeeId) {
+    const error = new Error("employee_id is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const employee = await Employee.findByPk(employeeId, {
+    attributes: ["id", "first_name", "last_name"],
+  });
+
+  if (!employee) {
+    const error = new Error("Employee not found.");
+    error.statusCode = 404;
+    throw error;
+  }
 
   const noteInput =
     payload.note ??
@@ -631,6 +658,7 @@ async function saveOrUpdateEvent({ eventId = null, payload = {}, actorId }) {
     eventType?.label,
     note,
     payload.title || existingEvent?.title,
+    Boolean(eventType?.is_holiday),
   );
 
   const eventPayload = {
@@ -1205,6 +1233,13 @@ exports.deleteEventById = async (req, res) => {
 
     const existingEvent = await Event.findByPk(eventId, {
       attributes: ["id", "employee_id"],
+      include: [
+        {
+          model: EventMetadata,
+          required: false,
+          include: [{ model: EventType, required: false }],
+        },
+      ],
     });
 
     if (!existingEvent) {
@@ -1216,6 +1251,16 @@ exports.deleteEventById = async (req, res) => {
     }
 
     const isAdmin = Number(actor.role_id) === 3;
+    const existingMetadata = getEventMetadataRecord(existingEvent);
+    const existingEventType = getMetadataEventType(existingMetadata);
+    if (!isAdmin && existingEventType?.is_holiday) {
+      return res.status(403).json({
+        message: "Only admins can delete holidays.",
+        data: [],
+        internalStatus: "fail",
+      });
+    }
+
     if (!isAdmin && Number(existingEvent.employee_id) !== Number(req.userId)) {
       return res.status(403).json({
         message: "You can only delete your own events.",

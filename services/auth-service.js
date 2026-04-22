@@ -267,6 +267,7 @@ async function login(command) {
   return {
     accessToken: authPayload.accessToken,
     refreshToken,
+    sessionId: session.id,
     user: authPayload.user,
     totalEmployees: authPayload.totalEmployees,
     session: authPayload.session,
@@ -336,6 +337,7 @@ async function refresh(command) {
   return {
     accessToken: authPayload.accessToken,
     refreshToken: nextRefreshToken,
+    sessionId: updatedSession.id,
     user: authPayload.user,
     session: authPayload.session,
   };

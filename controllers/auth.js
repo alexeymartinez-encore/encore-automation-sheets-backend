@@ -1,7 +1,14 @@
-const crypto = require("crypto");
-
 const authDto = require("../dtos/auth-dto");
 const authService = require("../services/auth-service");
+const csrfToken = require("../util/csrf-token");
+
+function setCsrfCookie(res, sessionId) {
+  res.cookie(
+    authDto.CSRF_COOKIE_NAME,
+    csrfToken.createCsrfToken(sessionId),
+    authDto.toCsrfCookieOptions()
+  );
+}
 
 // Employee Signup
 exports.signup = async (req, res, next) => {
@@ -25,8 +32,6 @@ exports.login = async (req, res, next) => {
       headers: req.headers,
     });
 
-    const csrfToken = crypto.randomBytes(24).toString("hex");
-
     res
       .cookie(
         authDto.ACCESS_COOKIE_NAME,
@@ -37,10 +42,9 @@ exports.login = async (req, res, next) => {
         authDto.REFRESH_COOKIE_NAME,
         result.refreshToken,
         authDto.toRefreshCookieOptions()
-      )
-      .cookie(authDto.CSRF_COOKIE_NAME, csrfToken, authDto.toCsrfCookieOptions())
-      .status(200)
-      .json(authDto.toLoginResponse(result));
+      );
+    setCsrfCookie(res, result.sessionId);
+    res.status(200).json(authDto.toLoginResponse(result));
   } catch (err) {
     err.statusCode = err.statusCode || 401;
     next(err);
@@ -81,8 +85,6 @@ exports.refresh = async (req, res, next) => {
       headers: req.headers,
     });
 
-    const csrfToken = crypto.randomBytes(24).toString("hex");
-
     res
       .cookie(
         authDto.ACCESS_COOKIE_NAME,
@@ -93,10 +95,9 @@ exports.refresh = async (req, res, next) => {
         authDto.REFRESH_COOKIE_NAME,
         result.refreshToken,
         authDto.toRefreshCookieOptions()
-      )
-      .cookie(authDto.CSRF_COOKIE_NAME, csrfToken, authDto.toCsrfCookieOptions())
-      .status(200)
-      .json(authDto.toRefreshResponse(result));
+      );
+    setCsrfCookie(res, result.sessionId);
+    res.status(200).json(authDto.toRefreshResponse(result));
   } catch (err) {
     err.statusCode = err.statusCode || 401;
     next(err);
@@ -136,9 +137,13 @@ exports.verifyMe = async (req, res, next) => {
       req.accessTokenExpiresAt
     );
 
-    if (!req.cookies?.[authDto.CSRF_COOKIE_NAME]) {
-      const csrfToken = crypto.randomBytes(24).toString("hex");
-      res.cookie(authDto.CSRF_COOKIE_NAME, csrfToken, authDto.toCsrfCookieOptions());
+    if (
+      !csrfToken.verifyCsrfToken(
+        req.cookies?.[authDto.CSRF_COOKIE_NAME],
+        req.session?.id
+      )
+    ) {
+      setCsrfCookie(res, req.session.id);
     }
 
     res.status(200).json(authDto.toVerifyResponse(result));
