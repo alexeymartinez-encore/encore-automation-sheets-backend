@@ -1,9 +1,11 @@
+const jwt = require("jsonwebtoken");
+
 const authDto = require("../dtos/auth-dto");
+const csrfToken = require("../util/csrf-token");
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_EXEMPT_PATHS = new Set([
   "/auth/login",
-  "/auth/signup",
   "/auth/request-reset",
   "/auth/reset-password",
 ]);
@@ -24,6 +26,36 @@ function forbidden(message) {
   const error = new Error(message);
   error.statusCode = 403;
   return error;
+}
+
+function getSessionIdFromToken(token, expectedType) {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      ignoreExpiration: true,
+    });
+
+    if (decoded?.type !== expectedType || !decoded.sid) {
+      return null;
+    }
+
+    return decoded.sid;
+  } catch (error) {
+    return null;
+  }
+}
+
+function getSessionBoundCsrfId(req) {
+  return (
+    getSessionIdFromToken(
+      req.cookies?.[authDto.REFRESH_COOKIE_NAME],
+      "refresh"
+    ) ||
+    getSessionIdFromToken(req.cookies?.[authDto.ACCESS_COOKIE_NAME], "access")
+  );
 }
 
 module.exports = function csrfProtection(req, res, next) {
@@ -61,7 +93,15 @@ module.exports = function csrfProtection(req, res, next) {
 
   const csrfCookie = req.cookies?.[authDto.CSRF_COOKIE_NAME];
   const csrfHeader = req.get("x-csrf-token");
-  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+  const sessionId = getSessionBoundCsrfId(req);
+
+  if (
+    !csrfCookie ||
+    !csrfHeader ||
+    !sessionId ||
+    !csrfToken.timingSafeEqualString(csrfCookie, csrfHeader) ||
+    !csrfToken.verifyCsrfToken(csrfHeader, sessionId)
+  ) {
     return next(forbidden("Invalid CSRF token."));
   }
 

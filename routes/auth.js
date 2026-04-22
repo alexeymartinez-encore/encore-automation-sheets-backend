@@ -4,12 +4,15 @@ const { body } = require("express-validator");
 const Employee = require("../models/employee");
 const authController = require("../controllers/auth");
 const isAuth = require("../middleware/is-auth");
+const authorizeRole = require("../middleware/authorize-role");
 
 const router = express.Router();
 
 // Employee Signup  Route
 router.put(
   "/signup",
+  isAuth,
+  authorizeRole("admin"),
   [
     body("email")
       .isEmail()
